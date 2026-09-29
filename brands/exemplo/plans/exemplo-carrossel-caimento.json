@@ -1,0 +1,103 @@
+{
+  "brand": "exemplo",
+  "title": "Exemplo - Por que o caimento importa",
+  "caption_hint": "O caimento faz toda a diferença. Modelagem e tecido trabalham juntos para acompanhar o seu movimento.",
+  "slides": [
+    {
+      "layout": "capa_manchete",
+      "photo": "Fotos/FEMININO/look-01.jpg",
+      "focus": [
+        0.5,
+        0.0
+      ],
+      "kicker": "Por que o",
+      "headline": "Caimento\nimporta?",
+      "box": "Porque a peça certa acompanha o corpo,\ne não o contrário.",
+      "box_top": 420,
+      "extend": {
+        "top": 0.55,
+        "left": 0.25,
+        "right": 0.25
+      }
+    },
+    {
+      "layout": "foto_nota",
+      "photo": "Fotos/FEMININO/look-02.jpg",
+      "zoom": 1.2,
+      "focus": [
+        0.3,
+        0.55
+      ],
+      "position": "top_left",
+      "paragraphs": [
+        "Um **caimento preciso**\nvaloriza a silhueta\nsem apertar.",
+        "**Modelagem e tecido**\ntrabalham juntos desde\no primeiro movimento."
+      ]
+    },
+    {
+      "layout": "manifesto_preto",
+      "title": "Uma modelagem\ninteligente",
+      "paragraphs": [
+        "acompanha a __amplitude dos movimentos__\nsem marcar ou limitar o corpo.",
+        "Menos ajuste ao longo do dia.\nMais liberdade para seguir."
+      ]
+    },
+    {
+      "layout": "foto_nota",
+      "photo": "Fotos/FEMININO/look-03.jpg",
+      "position": "bottom_left",
+      "size": "large",
+      "paragraphs": [
+        "Tecido de\n*toque macio*\nque mantém a forma\ndurante todo o dia."
+      ]
+    },
+    {
+      "layout": "beneficio_duplo",
+      "top": {
+        "photo": "Fotos/MASCULINO/look-06.jpg",
+        "extend": {
+          "right": 0.6
+        },
+        "focus": [
+          0.5,
+          0.36
+        ],
+        "title": "Toque\nseco",
+        "text": "Seca rápido e mantém o conforto do treino ao fim do dia."
+      },
+      "bottom": {
+        "photo": "Fotos/FEMININO/look-04.jpg",
+        "extend": {
+          "left": 0.6
+        },
+        "focus": [
+          0.5,
+          0.4
+        ],
+        "title": "Compressão\nleve",
+        "text": "Sustenta sem apertar e acompanha cada movimento."
+      }
+    },
+    {
+      "layout": "foto_nota",
+      "photo": "Fotos/FEMININO/look-05.jpg",
+      "zoom": 1.6,
+      "focus": [
+        0.2,
+        0.31
+      ],
+      "position": "middle_left",
+      "size": "large",
+      "paragraphs": [
+        "*Regata Gola Alta*\nLeve no corpo.\nConforto que permanece."
+      ]
+    },
+    {
+      "layout": "manifesto_assinatura",
+      "lines": [
+        "**Feito para acompanhar o seu dia.**\nDo primeiro ao último movimento."
+      ],
+      "tagline": "Essencial em cada detalhe."
+    }
+  ]
+}

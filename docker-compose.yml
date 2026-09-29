@@ -1,0 +1,182 @@
+# PipeDesign — ambiente local (n8n + PostgreSQL/pgvector + canva-auth)
+#
+#   cp .env.example .env   # preencha os valores
+#   docker compose up -d --build
+#
+# Todas as portas são publicadas apenas em 127.0.0.1 (nada fica exposto na rede).
+
+name: ${COMPOSE_PROJECT_NAME:-pipedesign}
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?defina POSTGRES_USER no .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+      POSTGRES_DB: ${POSTGRES_N8N_DB:-n8n}
+      POSTGRES_APP_DB: ${POSTGRES_APP_DB:-pipedesign}
+      TZ: ${TZ:-America/Sao_Paulo}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  canva-auth:
+    build:
+      context: ./services/canva-auth
+    image: pipedesign/canva-auth:local
+    restart: unless-stopped
+    # Só as variáveis necessárias: o client secret fica restrito a este container.
+    environment:
+      CANVA_CLIENT_ID: ${CANVA_CLIENT_ID:-}
+      CANVA_CLIENT_SECRET: ${CANVA_CLIENT_SECRET:-}
+      CANVA_REDIRECT_URI: ${CANVA_REDIRECT_URI:-http://127.0.0.1:3001/auth/canva/callback}
+      CANVA_AUTH_URL: ${CANVA_AUTH_URL:-https://www.canva.com/api/oauth/authorize}
+      CANVA_TOKEN_URL: ${CANVA_TOKEN_URL:-https://api.canva.com/rest/v1/oauth/token}
+      CANVA_SCOPES: ${CANVA_SCOPES:-}
+      CANVA_AUTH_HOST: ${CANVA_AUTH_HOST:-0.0.0.0}
+      CANVA_AUTH_PORT: ${CANVA_AUTH_PORT:-3001}
+      TOKEN_STORE_PATH: ${TOKEN_STORE_PATH:-/data/canva-token.json}
+      CANVA_AUTH_API_KEY: ${CANVA_AUTH_API_KEY:-}
+      CANVA_TOKEN_REFRESH_SKEW_SECONDS: ${CANVA_TOKEN_REFRESH_SKEW_SECONDS:-300}
+      CANVA_HTTP_TIMEOUT_MS: ${CANVA_HTTP_TIMEOUT_MS:-15000}
+      TZ: ${TZ:-America/Sao_Paulo}
+    volumes:
+      # Token store fora do /workspace (que contém os assets dos clientes).
+      - canva_auth_data:/data
+    ports:
+      # O navegador usa http://127.0.0.1:3001 para o OAuth; a porta interna precisa ser a mesma.
+      - "127.0.0.1:${CANVA_AUTH_PORT:-3001}:${CANVA_AUTH_PORT:-3001}"
+
+  ollama:
+    image: ollama/ollama:${OLLAMA_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "127.0.0.1:${OLLAMA_PORT:-11434}:11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:${N8N_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      canva-auth:
+        condition: service_started
+      draft-renderer:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    environment:
+      # --- banco interno do n8n ---
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: ${POSTGRES_N8N_DB:-n8n}
+      DB_POSTGRESDB_USER: ${POSTGRES_USER}
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}
+
+      # --- servidor ---
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?defina N8N_ENCRYPTION_KEY no .env (openssl rand -hex 32)}
+      N8N_HOST: 127.0.0.1
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      N8N_EDITOR_BASE_URL: http://127.0.0.1:${N8N_PORT:-5678}/
+      WEBHOOK_URL: http://127.0.0.1:${N8N_PORT:-5678}/
+      # Acesso só via 127.0.0.1 sem HTTPS (o Safari recusa cookie "secure" em http).
+      N8N_SECURE_COOKIE: "false"
+      GENERIC_TIMEZONE: ${TZ:-America/Sao_Paulo}
+      TZ: ${TZ:-America/Sao_Paulo}
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
+      N8N_DIAGNOSTICS_ENABLED: "false"
+
+      # --- arquivos locais: nodes de leitura/escrita só enxergam /workspace ---
+      N8N_RESTRICT_FILE_ACCESS_TO: /workspace
+
+      # --- variáveis NÃO secretas lidas nos workflows via $env ---
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      CANVA_AUTH_INTERNAL_URL: http://canva-auth:${CANVA_AUTH_PORT:-3001}
+      CANVA_AUTH_PUBLIC_URL: http://127.0.0.1:${CANVA_AUTH_PORT:-3001}
+      CANVA_AUTH_API_KEY: ${CANVA_AUTH_API_KEY:-}
+      CANVA_API_BASE_URL: ${CANVA_API_BASE_URL:-https://api.canva.com/rest/v1}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_API_BASE_URL: ${OPENAI_API_BASE_URL:-https://api.openai.com/v1}
+      OLLAMA_BASE_URL: http://ollama:11434
+      LOCAL_VISION_MODEL: ${LOCAL_VISION_MODEL:-gemma3:4b}
+      LOCAL_EMBEDDING_MODEL: ${LOCAL_EMBEDDING_MODEL:-embeddinggemma}
+      OPENAI_ART_DIRECTOR_MODEL: ${OPENAI_ART_DIRECTOR_MODEL:-gpt-4o-mini}
+      STOCK_MAX_SCENES: ${STOCK_MAX_SCENES:-7}
+      ASSET_INDEX_LIMIT: ${ASSET_INDEX_LIMIT:-3}
+      ASSET_INDEX_BRAND: ${ASSET_INDEX_BRAND:-exemplo}
+      ASSET_INDEX_GLOB: ${ASSET_INDEX_GLOB:-}
+      DRAFT_RENDERER_URL: http://draft-renderer:8080
+      CANVA_TEST_TEMPLATE_NAME: ${CANVA_TEST_TEMPLATE_NAME:-}
+      CANVA_TEST_BRAND_TEMPLATE_ID: ${CANVA_TEST_BRAND_TEMPLATE_ID:-}
+      PIPEDESIGN_DB_HOST: postgres
+      PIPEDESIGN_DB_PORT: "5432"
+      PIPEDESIGN_DB_NAME: ${POSTGRES_APP_DB:-pipedesign}
+      PIPEDESIGN_DB_USER: ${POSTGRES_USER}
+      SPIKE_IMAGE_PATH: ${SPIKE_IMAGE_PATH:-/workspace/spike/test-image.jpg}
+      SPIKE_HEADLINE: ${SPIKE_HEADLINE:-}
+      SPIKE_SUBHEADLINE: ${SPIKE_SUBHEADLINE:-}
+      SPIKE_DESIGN_TITLE: ${SPIKE_DESIGN_TITLE:-}
+      SPIKE_MODE: ${SPIKE_MODE:-full}
+      SPIKE_IMPORT_GLOB: ${SPIKE_IMPORT_GLOB:-/workspace/spike/import-test/*.{pdf,pptx}}
+      SPIKE_POLL_INTERVAL_SECONDS: ${SPIKE_POLL_INTERVAL_SECONDS:-2}
+      SPIKE_POLL_MAX_ATTEMPTS: ${SPIKE_POLL_MAX_ATTEMPTS:-30}
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./workspace:/workspace
+      - ./brands:/workspace/brands:ro
+      - ./schemas:/workspace/schemas:ro
+      - ./prompts:/workspace/prompts:ro
+    ports:
+      - "127.0.0.1:${N8N_PORT:-5678}:5678"
+    extra_hosts:
+      # Permite chamar serviços do host (ex.: Ollama) via http://host.docker.internal
+      - "host.docker.internal:host-gateway"
+
+  draft-renderer:
+    build:
+      context: ./services/draft-renderer
+    image: pipedesign/draft-renderer:local
+    restart: unless-stopped
+    environment:
+      RENDERER_HOST: 0.0.0.0
+      RENDERER_PORT: 8080
+      BRANDS_DIR: /brands
+      WORKSPACE_ROOT: /workspace
+      # Banco externo usado apenas como fallback de cenas. A chave não é repassada ao n8n.
+      PEXELS_API_KEY: ${PEXELS_API_KEY:-}
+      STOCK_CACHE_TTL_SECONDS: ${STOCK_CACHE_TTL_SECONDS:-86400}
+      TZ: ${TZ:-America/Sao_Paulo}
+    volumes:
+      - ./brands:/brands:ro
+      - ./workspace:/workspace
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  postgres_data:
+  n8n_data:
+  canva_auth_data:
+  ollama_data:

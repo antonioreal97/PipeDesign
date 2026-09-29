@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pipedesign.local/schemas/creative-plan.schema.json",
+  "title": "CreativePlan",
+  "description": "Creative Plan executável pelo draft-renderer para uma marca em brands/<slug>.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["job_id", "brand", "title", "slides"],
+  "properties": {
+    "job_id": { "type": "string", "format": "uuid" },
+    "brand": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+    "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "credits": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["file_path", "provider", "provider_url", "photo_url", "photographer", "photographer_url"],
+        "properties": {
+          "file_path": { "type": "string", "pattern": "^Fotos/BANCO/PEXELS/" },
+          "provider": { "const": "Pexels" },
+          "provider_url": { "const": "https://www.pexels.com" },
+          "photo_url": { "type": "string", "format": "uri" },
+          "photographer": { "type": "string", "minLength": 1 },
+          "photographer_url": { "type": "string", "format": "uri" }
+        }
+      }
+    },
+    "slides": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 10,
+      "items": { "$ref": "#/$defs/slide" }
+    }
+  },
+  "$defs": {
+    "focus": {
+      "type": "array",
+      "prefixItems": [
+        { "type": "number", "minimum": 0, "maximum": 1 },
+        { "type": "number", "minimum": 0, "maximum": 1 }
+      ],
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "extend": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "top": { "type": "number", "minimum": 0, "maximum": 1 },
+        "left": { "type": "number", "minimum": 0, "maximum": 1 },
+        "right": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "photoOptions": {
+      "type": "object",
+      "properties": {
+        "photo": { "type": "string", "pattern": "^Fotos/" },
+        "focus": { "$ref": "#/$defs/focus" },
+        "zoom": { "type": "number", "minimum": 1, "maximum": 3 },
+        "extend": { "$ref": "#/$defs/extend" }
+      }
+    },
+    "benefit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["photo", "title"],
+      "properties": {
+        "photo": { "type": "string", "pattern": "^Fotos/" },
+        "title": { "type": "string", "minLength": 1 },
+        "text": { "type": "string" },
+        "focus": { "$ref": "#/$defs/focus" },
+        "zoom": { "type": "number", "minimum": 1, "maximum": 3 },
+        "extend": { "$ref": "#/$defs/extend" }
+      }
+    },
+    "moodboardImage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["photo"],
+      "properties": {
+        "photo": { "type": "string", "pattern": "^Fotos/" },
+        "focus": { "$ref": "#/$defs/focus" },
+        "zoom": { "type": "number", "minimum": 1, "maximum": 3 },
+        "extend": { "$ref": "#/$defs/extend" }
+      }
+    },
+    "slide": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["layout", "photo", "headline"],
+          "properties": {
+            "layout": { "const": "capa_manchete" },
+            "photo": { "type": "string", "pattern": "^Fotos/" },
+            "kicker": { "type": "string" },
+            "headline": { "type": "string", "minLength": 1 },
+            "box": { "type": "string" },
+            "box_left": { "type": "number", "minimum": 0, "maximum": 1080 },
+            "box_width": { "type": "number", "minimum": 320, "maximum": 920 },
+            "box_top": { "type": "number", "minimum": 0, "maximum": 1240 },
+            "tone": { "enum": ["auto", "light", "dark"] },
+            "focus": { "$ref": "#/$defs/focus" },
+            "zoom": { "type": "number", "minimum": 1, "maximum": 3 },
+            "extend": { "$ref": "#/$defs/extend" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["layout", "photo"],
+          "properties": {
+            "layout": { "const": "foto_nota" },
+            "photo": { "type": "string", "pattern": "^Fotos/" },
+            "position": { "enum": ["top_left", "top_right", "bottom_left", "bottom_right", "middle_left", "middle_right"] },
+            "size": { "enum": ["regular", "large"] },
+            "paragraphs": { "type": "array", "items": { "type": "string" } },
+            "phrase": { "type": "string" },
+            "tone": { "enum": ["auto", "light", "dark"] },
+            "focus": { "$ref": "#/$defs/focus" },
+            "zoom": { "type": "number", "minimum": 1, "maximum": 3 },
+            "extend": { "$ref": "#/$defs/extend" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["layout", "title"],
+          "properties": {
+            "layout": { "const": "manifesto_preto" },
+            "title": { "type": "string", "minLength": 1 },
+            "paragraphs": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["layout", "text"],
+          "properties": {
+            "layout": { "const": "manifesto_frase" },
+            "text": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["layout"],
+          "properties": {
+            "layout": { "const": "manifesto_assinatura" },
+            "lines": { "type": "array", "items": { "type": "string" } },
+            "tagline": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["layout", "top", "bottom"],
+          "properties": {
+            "layout": { "const": "beneficio_duplo" },
+            "top": { "$ref": "#/$defs/benefit" },
+            "bottom": { "$ref": "#/$defs/benefit" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["layout", "scene", "product", "detail", "time", "lines"],
+          "properties": {
+            "layout": { "const": "moodboard_cena" },
+            "scene": { "$ref": "#/$defs/moodboardImage" },
+            "product": { "$ref": "#/$defs/moodboardImage" },
+            "detail": { "$ref": "#/$defs/moodboardImage" },
+            "time": { "type": "string", "minLength": 1 },
+            "lines": { "type": "array", "items": { "type": "string" } },
+            "side": { "enum": ["left", "right"] }
+          }
+        }
+      ]
+    }
+  }
+}

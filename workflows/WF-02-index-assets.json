@@ -1,0 +1,766 @@
+{
+  "id": "08c0d2a1-5086-4c9f-ac47-d646eb68a3f7",
+  "name": "WF-02 Index Assets",
+  "nodes": [
+    {
+      "id": "7985dce1-9631-4c42-a5d5-28b4b6224a3b",
+      "name": "A1 · Start Index",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "95788054-e755-4c96-acfa-dc755ef33361",
+      "name": "A1.5 · Load Brand",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        0,
+        480
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "a8dba701-d4fc-4036-a2e6-38eae679d54f",
+          "name": "PipeDesign Postgres"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT slug, name, workspace_path FROM brands WHERE slug = $1 LIMIT 1;",
+        "options": {
+          "queryBatching": "independently",
+          "queryReplacement": "={{ [$env.ASSET_INDEX_BRAND || 'exemplo'] }}"
+        }
+      }
+    },
+    {
+      "id": "d9610936-3748-4b41-a6e8-d7e32720bc17",
+      "name": "A2 · Index Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const ROUTE = { NEXT: 0, SKIP: 1, FAIL: 2 };\nfunction fail(stage, code, message, context = {}) {\n  return [{ json: { route: ROUTE.FAIL, ok: false, step: stage, error: { status: 'failed', stage, code, message, retryable: false, context } } }];\n}\n\nconst brandSlug = String($env.ASSET_INDEX_BRAND || 'exemplo');\nconst brandRow = $input.first().json || {};\nif (brandRow.error) return fail('config', 'BRAND_LOAD_FAILED', brandRow.error.message || String(brandRow.error), { brand_id: brandSlug });\nif (!brandRow.slug || !brandRow.workspace_path) {\n  return fail('config', 'BRAND_NOT_FOUND', 'Marca ' + brandSlug + ' não encontrada na tabela brands ou sem workspace_path.', { brand_id: brandSlug });\n}\nconst clientRoot = String(brandRow.workspace_path).replace(/\\/$/, '');\nconst limit = Number($env.ASSET_INDEX_LIMIT || 3);\nconst fileGlob = String($env.ASSET_INDEX_GLOB || clientRoot + '/Fotos/*.jpg');\nconst ollamaBase = String($env.OLLAMA_BASE_URL || $env.LOCAL_VISION_BASE_URL || 'http://ollama:11434').replace(/\\/$/, '');\nif (!Number.isInteger(limit) || limit < 1 || limit > 50) {\n  return fail('config', 'CONFIG_INVALID', 'ASSET_INDEX_LIMIT deve ser inteiro entre 1 e 50.');\n}\nif (!fileGlob.startsWith(clientRoot + '/Fotos/')) {\n  return fail('config', 'CONFIG_INVALID', 'ASSET_INDEX_GLOB deve ficar dentro de ' + clientRoot + '/Fotos/.', { brand_id: brandSlug, file_glob: fileGlob });\n}\nif (!/^http:\\/\\/(ollama|host\\.docker\\.internal|127\\.0\\.0\\.1|localhost)(:\\d+)?$/i.test(ollamaBase)) {\n  return fail('config', 'OLLAMA_URL_INVALID', 'OLLAMA_BASE_URL deve apontar para um host local permitido. Não há fallback externo.', { ollama_base_url: ollamaBase });\n}\nreturn [{ json: {\n  route: ROUTE.NEXT, ok: true, step: 'config', brand_id: brandRow.slug, brand_name: brandRow.name, client_root: clientRoot,\n  file_glob: fileGlob, limit,\n  ollama_base_url: ollamaBase,\n  vision_model: $env.LOCAL_VISION_MODEL || 'gemma3:4b',\n  embedding_model: $env.LOCAL_EMBEDDING_MODEL || 'embeddinggemma',\n  embedding_dimensions: 768,\n} }];\n"
+      }
+    },
+    {
+      "id": "8c0ffb2a-9232-47c5-a5c2-b6c4a395b470",
+      "name": "A3 · Config OK?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        480,
+        300
+      ],
+      "parameters": {
+        "mode": "expression",
+        "numberOutputs": 3,
+        "output": "={{ $json.route }}",
+        "looseTypeValidation": false
+      }
+    },
+    {
+      "id": "8ea5bb0d-cad5-40e6-a2a9-353ae06a2b4e",
+      "name": "B1 · Read Brand Photos",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        300
+      ],
+      "parameters": {
+        "operation": "read",
+        "fileSelector": "={{ $('A2 · Index Config').first().json.file_glob }}",
+        "options": {
+          "dataPropertyName": "data"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "0860c6ff-0f2f-4577-a531-6db8e94fe69a",
+      "name": "B1.5 · Limit Sample",
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        960,
+        300
+      ],
+      "parameters": {
+        "maxItems": "={{ Number($env.ASSET_INDEX_LIMIT || 3) }}"
+      }
+    },
+    {
+      "id": "023398d8-653e-4d76-a31a-b08cb7f0249d",
+      "name": "B1.6 · One Photo at a Time",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1200,
+        300
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "a87f4bb4-520f-4172-a034-962c18fd155d",
+      "name": "B2 · Prepare Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const ASSET_INDEX_MAX = 50;\n\nconst SHA256_K = [\n  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,\n  0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,\n  0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,\n  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,\n  0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,\n  0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,\n  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,\n  0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,\n];\n\nconst rotr = (value, bits) => (value >>> bits) | (value << (32 - bits));\n\nfunction sha256Bytes(source) {\n  const bytes = source instanceof Uint8Array ? source : new Uint8Array(source);\n  const bitLength = bytes.length * 8;\n  const paddedLength = Math.ceil((bytes.length + 9) / 64) * 64;\n  const padded = new Uint8Array(paddedLength);\n  padded.set(bytes);\n  padded[bytes.length] = 0x80;\n  const view = new DataView(padded.buffer);\n  const high = Math.floor(bitLength / 0x100000000);\n  const low = bitLength >>> 0;\n  view.setUint32(paddedLength - 8, high, false);\n  view.setUint32(paddedLength - 4, low, false);\n\n  const hash = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];\n  const words = new Uint32Array(64);\n  for (let offset = 0; offset < paddedLength; offset += 64) {\n    for (let i = 0; i < 16; i += 1) words[i] = view.getUint32(offset + i * 4, false);\n    for (let i = 16; i < 64; i += 1) {\n      const s0 = rotr(words[i - 15], 7) ^ rotr(words[i - 15], 18) ^ (words[i - 15] >>> 3);\n      const s1 = rotr(words[i - 2], 17) ^ rotr(words[i - 2], 19) ^ (words[i - 2] >>> 10);\n      words[i] = (words[i - 16] + s0 + words[i - 7] + s1) >>> 0;\n    }\n    let [a, b, c, d, e, f, g, h] = hash;\n    for (let i = 0; i < 64; i += 1) {\n      const s1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);\n      const ch = (e & f) ^ (~e & g);\n      const temp1 = (h + s1 + ch + SHA256_K[i] + words[i]) >>> 0;\n      const s0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);\n      const maj = (a & b) ^ (a & c) ^ (b & c);\n      const temp2 = (s0 + maj) >>> 0;\n      h = g; g = f; f = e; e = (d + temp1) >>> 0; d = c; c = b; b = a; a = (temp1 + temp2) >>> 0;\n    }\n    const values = [a, b, c, d, e, f, g, h];\n    for (let i = 0; i < 8; i += 1) hash[i] = (hash[i] + values[i]) >>> 0;\n  }\n  return hash.map((value) => value.toString(16).padStart(8, '0')).join('');\n}\n\nfunction imageDimensions(source) {\n  const bytes = source instanceof Uint8Array ? source : new Uint8Array(source);\n  if (bytes.length >= 24 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {\n    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);\n    return { width: view.getUint32(16, false), height: view.getUint32(20, false) };\n  }\n  if (bytes.length >= 4 && bytes[0] === 0xff && bytes[1] === 0xd8) {\n    let offset = 2;\n    while (offset + 9 < bytes.length) {\n      if (bytes[offset] !== 0xff) { offset += 1; continue; }\n      const marker = bytes[offset + 1];\n      if (marker === 0xd8 || marker === 0xd9) { offset += 2; continue; }\n      const length = (bytes[offset + 2] << 8) | bytes[offset + 3];\n      if (length < 2 || offset + length + 2 > bytes.length) break;\n      if ((marker >= 0xc0 && marker <= 0xc3) || (marker >= 0xc5 && marker <= 0xc7) ||\n          (marker >= 0xc9 && marker <= 0xcb) || (marker >= 0xcd && marker <= 0xcf)) {\n        return {\n          height: (bytes[offset + 5] << 8) | bytes[offset + 6],\n          width: (bytes[offset + 7] << 8) | bytes[offset + 8],\n        };\n      }\n      offset += length + 2;\n    }\n  }\n  return { width: undefined, height: undefined };\n}\n\nfunction normalizeAssetPath(directory, fileName, clientRoot) {\n  if (!clientRoot) throw new Error('clientRoot é obrigatório');\n  const full = String(directory || '').replace(/\\/$/, '') + '/' + String(fileName || '');\n  const normalized = full.replaceAll('\\\\', '/').replace(/\\/+/g, '/');\n  const prefix = clientRoot.replace(/\\/$/, '') + '/';\n  if (!normalized.startsWith(prefix)) throw new Error('foto fora do workspace da marca: ' + normalized);\n  const relative = normalized.slice(prefix.length);\n  if (!relative.startsWith('Fotos/') || relative.includes('../')) throw new Error('path de foto inválido: ' + relative);\n  return relative;\n}\n\nfunction validateAssetAnalysis(value) {\n  const errors = [];\n  if (!value || typeof value !== 'object' || Array.isArray(value)) return { ok: false, errors: ['análise deve ser objeto'] };\n  const requiredArrays = ['subjects', 'products', 'dominant_colors', 'style_keywords', 'suitable_for'];\n  for (const key of requiredArrays) {\n    if (!Array.isArray(value[key])) errors.push(key + ' deve ser array');\n  }\n  for (const key of ['asset_type', 'background', 'shot_type']) {\n    if (typeof value[key] !== 'string' || !value[key].trim()) errors.push(key + ' deve ser string');\n  }\n  const composition = value.composition;\n  if (!composition || typeof composition !== 'object' || Array.isArray(composition)) {\n    errors.push('composition deve ser objeto');\n  } else {\n    if (!['left', 'center', 'right', 'full_frame', 'none'].includes(composition.subject_position)) {\n      errors.push('composition.subject_position inválido');\n    }\n    const space = composition.negative_space;\n    if (!space || typeof space !== 'object') errors.push('composition.negative_space deve ser objeto');\n    else for (const side of ['left', 'right', 'top', 'bottom']) {\n      if (!['none', 'low', 'medium', 'high'].includes(space[side])) errors.push('negative_space.' + side + ' inválido');\n    }\n  }\n  return errors.length ? { ok: false, errors } : { ok: true, errors: [] };\n}\n\nfunction normalizeAssetAnalysis(value) {\n  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;\n  const normalized = { ...value };\n  for (const key of ['subjects', 'products', 'dominant_colors', 'style_keywords', 'suitable_for']) {\n    if (!Array.isArray(normalized[key])) continue;\n    normalized[key] = [...new Set(normalized[key]\n      .filter((item) => typeof item === 'string')\n      .map((item) => item.trim())\n      .filter(Boolean))];\n  }\n  return normalized;\n}\n\nfunction analysisToText(analysis, filePath) {\n  return [\n    'path: ' + filePath,\n    'tipo: ' + analysis.asset_type,\n    'sujeitos: ' + analysis.subjects.join(', '),\n    'produtos: ' + analysis.products.join(', '),\n    'cores: ' + analysis.dominant_colors.join(', '),\n    'fundo: ' + analysis.background,\n    'enquadramento: ' + analysis.shot_type,\n    'posição: ' + analysis.composition.subject_position,\n    'espaço negativo: ' + Object.entries(analysis.composition.negative_space).map(([k, v]) => k + '=' + v).join(', '),\n    'estilo: ' + analysis.style_keywords.join(', '),\n    'adequado para: ' + analysis.suitable_for.join(', '),\n  ].join('\\n');\n}\n\nconst ROUTE = { NEXT: 0, SKIP: 1, FAIL: 2 };\nfunction fail(stage, code, message, context = {}) {\n  return [{ json: { route: ROUTE.FAIL, ok: false, step: stage, error: { status: 'failed', stage, code, message, retryable: false, context } } }];\n}\n\nconst cfg = $('A2 · Index Config').first().json;\nconst item = $input.first();\nif (!item.binary || !item.binary.data) {\n  return [{ json: { route: ROUTE.FAIL, ok: false, step: 'read_assets', error: {\n    status: 'failed', stage: 'read_assets', code: 'ASSET_FILES_NOT_FOUND',\n    message: 'Nenhuma foto encontrada para o glob configurado.', retryable: false,\n    context: { file_glob: cfg.file_glob },\n  } } }];\n}\nconst bin = item.binary.data;\n// This node runs once per item, so index zero is always the current binary.\n// Processing each file in isolation avoids n8n's ambiguous paired-item links\n// produced by a multi-file Read/Write Files node.\nconst bytes = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst fileName = bin.fileName || ('asset-' + $itemIndex + '.jpg');\nconst filePath = normalizeAssetPath(bin.directory, fileName, cfg.client_root);\nconst mime = bin.mimeType || (fileName.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg');\nconst dimensions = imageDimensions(bytes);\nconst imageBase64 = Buffer.from(bytes).toString('base64');\nreturn [{ json: {\n  route: ROUTE.NEXT, ok: true, step: 'prepare_asset', brand_id: cfg.brand_id,\n  file_path: filePath, file_name: fileName, mime_type: mime,\n  width: dimensions.width, height: dimensions.height,\n  orientation: dimensions.width && dimensions.height ? (dimensions.width === dimensions.height ? 'square' : dimensions.width > dimensions.height ? 'landscape' : 'portrait') : null,\n  sha256: sha256Bytes(bytes),\n  vision_request: {\n    model: cfg.vision_model,\n    messages: [\n      { role: 'system', content: 'Analise a foto para seleção de assets de design. Descreva somente o que está visível e responda estritamente no JSON Schema fornecido.' },\n      { role: 'user', content: 'Marca ' + cfg.brand_name + '. Arquivo: ' + filePath + '. Identifique produto, pessoa, composição, espaço negativo e usos adequados.', images: [imageBase64] },\n    ],\n    format: {\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"asset_type\",\"subjects\",\"products\",\"dominant_colors\",\"background\",\"shot_type\",\"composition\",\"style_keywords\",\"suitable_for\"],\"properties\":{\"asset_type\":{\"type\":\"string\",\"enum\":[\"product\",\"campaign\",\"lifestyle\",\"detail\",\"other\"]},\"subjects\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"maxItems\":12},\"products\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"maxItems\":12},\"dominant_colors\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"minItems\":1,\"maxItems\":8},\"background\":{\"type\":\"string\"},\"shot_type\":{\"type\":\"string\",\"enum\":[\"full_body\",\"three_quarter\",\"half_body\",\"close_up\",\"product_only\",\"detail\",\"other\"]},\"composition\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"subject_position\",\"negative_space\"],\"properties\":{\"subject_position\":{\"type\":\"string\",\"enum\":[\"left\",\"center\",\"right\",\"full_frame\",\"none\"]},\"negative_space\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"left\",\"right\",\"top\",\"bottom\"],\"properties\":{\"left\":{\"$ref\":\"#/$defs/spaceLevel\"},\"right\":{\"$ref\":\"#/$defs/spaceLevel\"},\"top\":{\"$ref\":\"#/$defs/spaceLevel\"},\"bottom\":{\"$ref\":\"#/$defs/spaceLevel\"}}}}},\"style_keywords\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"minItems\":1,\"maxItems\":12},\"suitable_for\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"enum\":[\"carousel_cover\",\"carousel_photo\",\"product_closeup\",\"reel_cover\",\"story\",\"background\"]},\"minItems\":1,\"uniqueItems\":true}},\"$defs\":{\"spaceLevel\":{\"type\":\"string\",\"enum\":[\"none\",\"low\",\"medium\",\"high\"]}}},\n    stream: false,\n    options: { temperature: 0, num_predict: 800 },\n  },\n} }];\n"
+      }
+    },
+    {
+      "id": "33fe1fc7-88a8-43eb-aab5-eece7d03f84b",
+      "name": "B3 · Files OK?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1680,
+        300
+      ],
+      "parameters": {
+        "mode": "expression",
+        "numberOutputs": 3,
+        "output": "={{ $json.route }}",
+        "looseTypeValidation": false
+      }
+    },
+    {
+      "id": "b5d24536-3714-4b96-a081-4eb677c64029",
+      "name": "C1 · Find Existing Asset",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1440,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "a8dba701-d4fc-4036-a2e6-38eae679d54f",
+          "name": "PipeDesign Postgres"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT a.id, a.file_path, a.sha256 FROM assets a JOIN brands b ON b.id = a.brand_id WHERE b.slug = $1 AND a.sha256 = $2 LIMIT 1;",
+        "options": {
+          "queryBatching": "independently",
+          "queryReplacement": "={{ [$json.brand_id, $json.sha256] }}"
+        }
+      }
+    },
+    {
+      "id": "a5d207f4-0d1b-4726-ad15-54886cb95b3b",
+      "name": "C2 · Existing?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const ROUTE = { NEXT: 0, SKIP: 1, FAIL: 2 };\nfunction fail(stage, code, message, context = {}) {\n  return [{ json: { route: ROUTE.FAIL, ok: false, step: stage, error: { status: 'failed', stage, code, message, retryable: false, context } } }];\n}\n\nconst source = $('B2 · Prepare Files').item.json;\nconst payload = $input.first().json || {};\nif (payload.error) return fail('asset_lookup', 'ASSET_LOOKUP_FAILED', payload.error.message || String(payload.error), { file_path: source.file_path });\nif (payload.id) return [{ json: { route: ROUTE.SKIP, ok: true, step: 'asset_skip', status: 'skipped', asset_id: payload.id, file_path: source.file_path, sha256: source.sha256 } }];\nreturn [{ json: { ...source, route: ROUTE.NEXT } }];\n"
+      }
+    },
+    {
+      "id": "3872c651-c931-4ca9-a30b-eecad847e264",
+      "name": "C3 · Analyze or Skip?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1920,
+        300
+      ],
+      "parameters": {
+        "mode": "expression",
+        "numberOutputs": 3,
+        "output": "={{ $json.route }}",
+        "looseTypeValidation": false
+      }
+    },
+    {
+      "id": "2d4b85ac-aaeb-4347-a824-48aaa9984a89",
+      "name": "D1 · Ollama Vision",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2160,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('A2 · Index Config').first().json.ollama_base_url + '/api/chat' }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.vision_request) }}",
+        "options": {
+          "timeout": 300000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "be5e39da-f6b4-4d05-a83e-ef605969580b",
+      "name": "D2 · Parse Analysis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const ASSET_INDEX_MAX = 50;\n\nconst SHA256_K = [\n  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,\n  0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,\n  0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,\n  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,\n  0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,\n  0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,\n  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,\n  0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,\n];\n\nconst rotr = (value, bits) => (value >>> bits) | (value << (32 - bits));\n\nfunction sha256Bytes(source) {\n  const bytes = source instanceof Uint8Array ? source : new Uint8Array(source);\n  const bitLength = bytes.length * 8;\n  const paddedLength = Math.ceil((bytes.length + 9) / 64) * 64;\n  const padded = new Uint8Array(paddedLength);\n  padded.set(bytes);\n  padded[bytes.length] = 0x80;\n  const view = new DataView(padded.buffer);\n  const high = Math.floor(bitLength / 0x100000000);\n  const low = bitLength >>> 0;\n  view.setUint32(paddedLength - 8, high, false);\n  view.setUint32(paddedLength - 4, low, false);\n\n  const hash = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];\n  const words = new Uint32Array(64);\n  for (let offset = 0; offset < paddedLength; offset += 64) {\n    for (let i = 0; i < 16; i += 1) words[i] = view.getUint32(offset + i * 4, false);\n    for (let i = 16; i < 64; i += 1) {\n      const s0 = rotr(words[i - 15], 7) ^ rotr(words[i - 15], 18) ^ (words[i - 15] >>> 3);\n      const s1 = rotr(words[i - 2], 17) ^ rotr(words[i - 2], 19) ^ (words[i - 2] >>> 10);\n      words[i] = (words[i - 16] + s0 + words[i - 7] + s1) >>> 0;\n    }\n    let [a, b, c, d, e, f, g, h] = hash;\n    for (let i = 0; i < 64; i += 1) {\n      const s1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);\n      const ch = (e & f) ^ (~e & g);\n      const temp1 = (h + s1 + ch + SHA256_K[i] + words[i]) >>> 0;\n      const s0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);\n      const maj = (a & b) ^ (a & c) ^ (b & c);\n      const temp2 = (s0 + maj) >>> 0;\n      h = g; g = f; f = e; e = (d + temp1) >>> 0; d = c; c = b; b = a; a = (temp1 + temp2) >>> 0;\n    }\n    const values = [a, b, c, d, e, f, g, h];\n    for (let i = 0; i < 8; i += 1) hash[i] = (hash[i] + values[i]) >>> 0;\n  }\n  return hash.map((value) => value.toString(16).padStart(8, '0')).join('');\n}\n\nfunction imageDimensions(source) {\n  const bytes = source instanceof Uint8Array ? source : new Uint8Array(source);\n  if (bytes.length >= 24 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {\n    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);\n    return { width: view.getUint32(16, false), height: view.getUint32(20, false) };\n  }\n  if (bytes.length >= 4 && bytes[0] === 0xff && bytes[1] === 0xd8) {\n    let offset = 2;\n    while (offset + 9 < bytes.length) {\n      if (bytes[offset] !== 0xff) { offset += 1; continue; }\n      const marker = bytes[offset + 1];\n      if (marker === 0xd8 || marker === 0xd9) { offset += 2; continue; }\n      const length = (bytes[offset + 2] << 8) | bytes[offset + 3];\n      if (length < 2 || offset + length + 2 > bytes.length) break;\n      if ((marker >= 0xc0 && marker <= 0xc3) || (marker >= 0xc5 && marker <= 0xc7) ||\n          (marker >= 0xc9 && marker <= 0xcb) || (marker >= 0xcd && marker <= 0xcf)) {\n        return {\n          height: (bytes[offset + 5] << 8) | bytes[offset + 6],\n          width: (bytes[offset + 7] << 8) | bytes[offset + 8],\n        };\n      }\n      offset += length + 2;\n    }\n  }\n  return { width: undefined, height: undefined };\n}\n\nfunction normalizeAssetPath(directory, fileName, clientRoot) {\n  if (!clientRoot) throw new Error('clientRoot é obrigatório');\n  const full = String(directory || '').replace(/\\/$/, '') + '/' + String(fileName || '');\n  const normalized = full.replaceAll('\\\\', '/').replace(/\\/+/g, '/');\n  const prefix = clientRoot.replace(/\\/$/, '') + '/';\n  if (!normalized.startsWith(prefix)) throw new Error('foto fora do workspace da marca: ' + normalized);\n  const relative = normalized.slice(prefix.length);\n  if (!relative.startsWith('Fotos/') || relative.includes('../')) throw new Error('path de foto inválido: ' + relative);\n  return relative;\n}\n\nfunction validateAssetAnalysis(value) {\n  const errors = [];\n  if (!value || typeof value !== 'object' || Array.isArray(value)) return { ok: false, errors: ['análise deve ser objeto'] };\n  const requiredArrays = ['subjects', 'products', 'dominant_colors', 'style_keywords', 'suitable_for'];\n  for (const key of requiredArrays) {\n    if (!Array.isArray(value[key])) errors.push(key + ' deve ser array');\n  }\n  for (const key of ['asset_type', 'background', 'shot_type']) {\n    if (typeof value[key] !== 'string' || !value[key].trim()) errors.push(key + ' deve ser string');\n  }\n  const composition = value.composition;\n  if (!composition || typeof composition !== 'object' || Array.isArray(composition)) {\n    errors.push('composition deve ser objeto');\n  } else {\n    if (!['left', 'center', 'right', 'full_frame', 'none'].includes(composition.subject_position)) {\n      errors.push('composition.subject_position inválido');\n    }\n    const space = composition.negative_space;\n    if (!space || typeof space !== 'object') errors.push('composition.negative_space deve ser objeto');\n    else for (const side of ['left', 'right', 'top', 'bottom']) {\n      if (!['none', 'low', 'medium', 'high'].includes(space[side])) errors.push('negative_space.' + side + ' inválido');\n    }\n  }\n  return errors.length ? { ok: false, errors } : { ok: true, errors: [] };\n}\n\nfunction normalizeAssetAnalysis(value) {\n  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;\n  const normalized = { ...value };\n  for (const key of ['subjects', 'products', 'dominant_colors', 'style_keywords', 'suitable_for']) {\n    if (!Array.isArray(normalized[key])) continue;\n    normalized[key] = [...new Set(normalized[key]\n      .filter((item) => typeof item === 'string')\n      .map((item) => item.trim())\n      .filter(Boolean))];\n  }\n  return normalized;\n}\n\nfunction analysisToText(analysis, filePath) {\n  return [\n    'path: ' + filePath,\n    'tipo: ' + analysis.asset_type,\n    'sujeitos: ' + analysis.subjects.join(', '),\n    'produtos: ' + analysis.products.join(', '),\n    'cores: ' + analysis.dominant_colors.join(', '),\n    'fundo: ' + analysis.background,\n    'enquadramento: ' + analysis.shot_type,\n    'posição: ' + analysis.composition.subject_position,\n    'espaço negativo: ' + Object.entries(analysis.composition.negative_space).map(([k, v]) => k + '=' + v).join(', '),\n    'estilo: ' + analysis.style_keywords.join(', '),\n    'adequado para: ' + analysis.suitable_for.join(', '),\n  ].join('\\n');\n}\n\nconst ROUTE = { NEXT: 0, SKIP: 1, FAIL: 2 };\nfunction fail(stage, code, message, context = {}) {\n  return [{ json: { route: ROUTE.FAIL, ok: false, step: stage, error: { status: 'failed', stage, code, message, retryable: false, context } } }];\n}\n\nconst source = $('C2 · Existing?').item.json;\nconst response = $input.first().json || {};\nif (!response.statusCode || response.statusCode < 200 || response.statusCode >= 300) {\n  return fail('vision', 'LOCAL_VISION_ERROR', response.body?.error || ('Ollama HTTP ' + (response.statusCode || 'sem status')), { file_path: source.file_path, model: $env.LOCAL_VISION_MODEL || 'gemma3:4b' });\n}\nlet analysis;\ntry { analysis = normalizeAssetAnalysis(JSON.parse(response.body?.message?.content || '')); }\ncatch (error) { return fail('vision', 'ANALYSIS_INVALID', 'Resposta do modelo visual local não é JSON válido: ' + error.message, { file_path: source.file_path }); }\nconst check = validateAssetAnalysis(analysis);\nif (!check.ok) return fail('vision', 'ANALYSIS_INVALID', check.errors.join('; '), { file_path: source.file_path });\nconst analysisText = analysisToText(analysis, source.file_path);\nreturn [{ json: {\n  route: ROUTE.NEXT, ok: true, step: 'vision',\n  brand_id: source.brand_id, file_path: source.file_path, file_name: source.file_name,\n  mime_type: source.mime_type, width: source.width, height: source.height, orientation: source.orientation,\n  sha256: source.sha256, analysis, analysis_text: analysisText, category: analysis.asset_type,\n  embedding_request: { model: $env.LOCAL_EMBEDDING_MODEL || 'embeddinggemma', input: analysisText, truncate: true },\n} }];\n"
+      }
+    },
+    {
+      "id": "4490532b-6616-4406-aab4-d8173f0bfe2b",
+      "name": "D3 · Analysis OK?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        2640,
+        300
+      ],
+      "parameters": {
+        "mode": "expression",
+        "numberOutputs": 3,
+        "output": "={{ $json.route }}",
+        "looseTypeValidation": false
+      }
+    },
+    {
+      "id": "39842435-8a5d-49f5-a284-806b91a2e38c",
+      "name": "E1 · Ollama Embedding",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2880,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('A2 · Index Config').first().json.ollama_base_url + '/api/embed' }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.embedding_request) }}",
+        "options": {
+          "timeout": 300000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "76f04890-77a4-4fdc-afb8-23b2487ced19",
+      "name": "E2 · Parse Embedding",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3120,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const ROUTE = { NEXT: 0, SKIP: 1, FAIL: 2 };\nfunction fail(stage, code, message, context = {}) {\n  return [{ json: { route: ROUTE.FAIL, ok: false, step: stage, error: { status: 'failed', stage, code, message, retryable: false, context } } }];\n}\n\nconst source = $('D2 · Parse Analysis').item.json;\nconst response = $input.first().json || {};\nif (!response.statusCode || response.statusCode < 200 || response.statusCode >= 300) {\n  return fail('embedding', 'LOCAL_EMBEDDING_ERROR', response.body?.error || ('Ollama HTTP ' + (response.statusCode || 'sem status')), { file_path: source.file_path, model: $env.LOCAL_EMBEDDING_MODEL || 'embeddinggemma' });\n}\nconst embedding = response.body?.embeddings?.[0];\nif (!Array.isArray(embedding) || embedding.length !== 768 || embedding.some((v) => typeof v !== 'number')) {\n  return fail('embedding', 'EMBEDDING_INVALID', 'Embedding local deve ter 768 números.', { file_path: source.file_path, dimensions: Array.isArray(embedding) ? embedding.length : null });\n}\nreturn [{ json: { ...source, route: ROUTE.NEXT, step: 'embedding', embedding_vector: '[' + embedding.join(',') + ']' } }];\n"
+      }
+    },
+    {
+      "id": "1e39931e-863d-46b4-a1c7-3f73d24f5e8d",
+      "name": "E3 · Embedding OK?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        3360,
+        300
+      ],
+      "parameters": {
+        "mode": "expression",
+        "numberOutputs": 3,
+        "output": "={{ $json.route }}",
+        "looseTypeValidation": false
+      }
+    },
+    {
+      "id": "d88de0e2-0d14-4cf0-a93a-70b006ba82ba",
+      "name": "F1 · Upsert Asset",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3600,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "a8dba701-d4fc-4036-a2e6-38eae679d54f",
+          "name": "PipeDesign Postgres"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO assets (brand_id, file_path, sha256, file_name, mime_type, width, height, orientation, category, analysis_json, analysis_text, embedding, is_active, updated_at)\nSELECT b.id, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12::vector, true, now() FROM brands b WHERE b.slug = $1\nON CONFLICT (brand_id, sha256) DO UPDATE SET file_path = EXCLUDED.file_path, file_name = EXCLUDED.file_name, mime_type = EXCLUDED.mime_type, width = EXCLUDED.width, height = EXCLUDED.height, orientation = EXCLUDED.orientation, category = EXCLUDED.category, analysis_json = EXCLUDED.analysis_json, analysis_text = EXCLUDED.analysis_text, embedding = EXCLUDED.embedding, is_active = true, updated_at = now()\nRETURNING id, file_path, sha256;",
+        "options": {
+          "queryBatching": "independently",
+          "queryReplacement": "={{ [$json.brand_id, $json.file_path, $json.sha256, $json.file_name, $json.mime_type, $json.width, $json.height, $json.orientation, $json.category, $json.analysis, $json.analysis_text, $json.embedding_vector] }}"
+        }
+      }
+    },
+    {
+      "id": "b79350c0-b29e-4f49-a079-f46067d163ae",
+      "name": "F2 · Asset Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3840,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const ROUTE = { NEXT: 0, SKIP: 1, FAIL: 2 };\nfunction fail(stage, code, message, context = {}) {\n  return [{ json: { route: ROUTE.FAIL, ok: false, step: stage, error: { status: 'failed', stage, code, message, retryable: false, context } } }];\n}\n\nconst source = $('E2 · Parse Embedding').item.json;\nconst payload = $input.first().json || {};\nif (payload.error || !payload.id) return fail('persist_asset', 'ASSET_PERSIST_FAILED', payload.error?.message || 'INSERT não retornou asset.', { file_path: source.file_path });\nreturn [{ json: { route: ROUTE.NEXT, ok: true, step: 'persist_asset', status: 'indexed', asset_id: payload.id, file_path: payload.file_path, sha256: payload.sha256 } }];\n"
+      }
+    },
+    {
+      "id": "7e3c4d73-02be-40de-abc3-85dd9925325f",
+      "name": "F3 · Persist OK?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        4080,
+        300
+      ],
+      "parameters": {
+        "mode": "expression",
+        "numberOutputs": 3,
+        "output": "={{ $json.route }}",
+        "looseTypeValidation": false
+      }
+    },
+    {
+      "id": "9d8d9a1a-4aaa-4957-a849-890ddaf7eaad",
+      "name": "S1 · Skipped",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        480
+      ],
+      "parameters": {
+        "jsCode": "return $input.all();"
+      }
+    },
+    {
+      "id": "9d06b571-e71a-4986-af88-54c80c35d812",
+      "name": "Z1 · Index Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4320,
+        300
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { ok: true, status: 'completed', processed: $input.all().length } }];"
+      }
+    },
+    {
+      "id": "66e788a8-185a-4ba8-a6f1-08578a354170",
+      "name": "X · Stop With Error",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        660
+      ],
+      "parameters": {
+        "errorType": "errorObject",
+        "errorObject": "={{ JSON.stringify($json.error) }}"
+      }
+    },
+    {
+      "id": "51747777-57cb-4c3f-ac4c-7169f1f3c8b0",
+      "name": "Nota · WF-02",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -120
+      ],
+      "parameters": {
+        "width": 860,
+        "height": 300,
+        "color": 5,
+        "content": "## WF-02 Index Assets\nExecução manual e incremental por SHA-256. A marca vem de `ASSET_INDEX_BRAND` (slug na tabela `brands`, que fornece o `workspace_path`); padrão/limite vêm de `ASSET_INDEX_GLOB` e `ASSET_INDEX_LIMIT`. Visão e embeddings rodam localmente no Ollama (`gemma3:4b` + `embeddinggemma`), sem fallback externo. Toda query inclui a marca."
+      }
+    }
+  ],
+  "connections": {
+    "A1 · Start Index": {
+      "main": [
+        [
+          {
+            "node": "A1.5 · Load Brand",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A1.5 · Load Brand": {
+      "main": [
+        [
+          {
+            "node": "A2 · Index Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A2 · Index Config": {
+      "main": [
+        [
+          {
+            "node": "A3 · Config OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A3 · Config OK?": {
+      "main": [
+        [
+          {
+            "node": "B1 · Read Brand Photos",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [],
+        [
+          {
+            "node": "X · Stop With Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "B1 · Read Brand Photos": {
+      "main": [
+        [
+          {
+            "node": "B1.5 · Limit Sample",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "B1.5 · Limit Sample": {
+      "main": [
+        [
+          {
+            "node": "B1.6 · One Photo at a Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "B1.6 · One Photo at a Time": {
+      "main": [
+        [
+          {
+            "node": "Z1 · Index Complete",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "B2 · Prepare Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "B2 · Prepare Files": {
+      "main": [
+        [
+          {
+            "node": "B3 · Files OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "B3 · Files OK?": {
+      "main": [
+        [
+          {
+            "node": "C1 · Find Existing Asset",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [],
+        [
+          {
+            "node": "X · Stop With Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "C1 · Find Existing Asset": {
+      "main": [
+        [
+          {
+            "node": "C2 · Existing?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "C2 · Existing?": {
+      "main": [
+        [
+          {
+            "node": "C3 · Analyze or Skip?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "C3 · Analyze or Skip?": {
+      "main": [
+        [
+          {
+            "node": "D1 · Ollama Vision",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "S1 · Skipped",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "X · Stop With Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "D1 · Ollama Vision": {
+      "main": [
+        [
+          {
+            "node": "D2 · Parse Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "D2 · Parse Analysis": {
+      "main": [
+        [
+          {
+            "node": "D3 · Analysis OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "D3 · Analysis OK?": {
+      "main": [
+        [
+          {
+            "node": "E1 · Ollama Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [],
+        [
+          {
+            "node": "X · Stop With Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "E1 · Ollama Embedding": {
+      "main": [
+        [
+          {
+            "node": "E2 · Parse Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "E2 · Parse Embedding": {
+      "main": [
+        [
+          {
+            "node": "E3 · Embedding OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "E3 · Embedding OK?": {
+      "main": [
+        [
+          {
+            "node": "F1 · Upsert Asset",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [],
+        [
+          {
+            "node": "X · Stop With Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "F1 · Upsert Asset": {
+      "main": [
+        [
+          {
+            "node": "F2 · Asset Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "F2 · Asset Result": {
+      "main": [
+        [
+          {
+            "node": "F3 · Persist OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "F3 · Persist OK?": {
+      "main": [
+        [
+          {
+            "node": "B1.6 · One Photo at a Time",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [],
+        [
+          {
+            "node": "X · Stop With Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "S1 · Skipped": {
+      "main": [
+        [
+          {
+            "node": "B1.6 · One Photo at a Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

@@ -1,0 +1,319 @@
+{
+  "brand_id": "exemplo",
+  "name": "Marca Exemplo",
+  "version": "2026-09-17",
+  "source": "Template de referência. Substitua pelos valores medidos nos posts publicados da marca e no kit em workspace/clients/<slug>.",
+  "canvas": {
+    "feed": {
+      "width": 1080,
+      "height": 1350
+    }
+  },
+  "colors": {
+    "branco": "#FFFFFF",
+    "preto": "#050505",
+    "areia": "#E8E3DD",
+    "petroleo": "#3F6C75",
+    "texto_claro": "#F2EEE8",
+    "fundo_texturizado": "#0B0B0B",
+    "fundo_claro": "#F3F1ED",
+    "linha": "#FFFFFF",
+    "texto_escuro": "#050505"
+  },
+  "fonts": {
+    "display": {
+      "role": "Manchetes e rótulos de benefício: serif de alto contraste, itálica, CAIXA ALTA, condensada",
+      "family": "DM Serif Display",
+      "italic": true,
+      "bold": false,
+      "status": "A_CONFIRMAR",
+      "note": "Candidata a serif de manchete. Trocar aqui quando a marca confirmar o nome da fonte no Canva."
+    },
+    "sans": {
+      "role": "Textos de apoio, notas, kicker",
+      "family": "DM Sans",
+      "status": "OK_CANVA",
+      "note": "Grotesca geométrica neutra próxima ao feed. DM Sans foi escolhida porque preserva a aparência na importação do PPTX para o Canva; Figtree era substituída."
+    },
+    "campanha_titulo": {
+      "role": "Títulos de campanhas promocionais (Brand Kit)",
+      "family": "Qurova Medium",
+      "status": "INDISPONIVEL_NA_CONTA",
+      "note": "Fonte do Brand Kit. Se não estiver na conta Canva conectada, o import troca por uma sans genérica."
+    },
+    "campanha_texto": {
+      "role": "Campanhas promocionais (Brand Kit)",
+      "family": "Poppins",
+      "status": "OK"
+    }
+  },
+  "logo": {
+    "icone_branco": "Logos/ICONE BRANCO SEM FUNDO.png",
+    "icone_preto": "Logos/ICONE PRETO SEM FUNDO.png",
+    "horizontal_branco": "Logos/HORIZONTAL BRANCO SEM FUNDO.png",
+    "horizontal_preto": "Logos/HORIZONTAL PRETO SEM FUNDO.png",
+    "rule": "Nos posts editoriais a marca quase não aparece: só o ícone pequeno em telas pretas de manifesto. Logo horizontal apenas em posts de lançamento/promoção."
+  },
+  "rules": {
+    "text_case": {
+      "display": "CAIXA ALTA, itálico",
+      "sans": "frase normal (sentence case), pontuação completa, frases curtas terminadas em ponto"
+    },
+    "emphasis": [
+      "negrito em 1 a 3 palavras-chave dentro da frase sans",
+      "palavra em serif itálica dentro da frase sans (ex.: 'Conforto *térmico* inteligente')",
+      "sublinhado fino em trechos técnicos nas telas pretas"
+    ],
+    "margins_px": 80,
+    "max_text_share": "texto ocupa no máximo ~20% da área em posts com foto",
+    "photo": "sempre sangrada (full-bleed) ou em blocos inteiros; nada de moldura, sombra ou faixa colorida",
+    "overlays": "sem faixas opacas ou degradês visíveis; o texto branco se apoia em áreas escuras/neutras da foto",
+    "buttons": "não usar botões/pílulas preenchidas; quando há destaque em caixa, é um retângulo arredondado só com contorno fino branco",
+    "palette_usage": "fotos em tons neutros (concreto, verde-oliva, areia, marinho); telas de texto em preto texturizado; fundo claro #F3F1ED só para close de produto",
+    "carousel": "capa com manchete serif + fotos com notas curtas alternadas com telas pretas de manifesto; última tela pode ser assinatura com o ícone da marca",
+    "forbidden": [
+      "emojis na arte",
+      "mais de 2 famílias por tela",
+      "texto centralizado longo",
+      "cores fora da paleta",
+      "CTA de venda em carrossel editorial"
+    ]
+  },
+  "voice": {
+    "pillars": [
+      "//active",
+      "//essencial",
+      "//sofisticada"
+    ],
+    "taglines": [
+      "Feito para acompanhar o seu dia.",
+      "Essencial em cada detalhe."
+    ],
+    "style": "frases curtas e rítmicas (três palavras com ponto: 'Leve. Seca. Acompanha.'), vocabulário técnico explicado de forma simples, português do Brasil"
+  },
+  "layouts": [
+    "capa_manchete",
+    "foto_nota",
+    "manifesto_preto",
+    "manifesto_frase",
+    "manifesto_assinatura",
+    "beneficio_duplo",
+    "moodboard_cena"
+  ],
+  "tone": {
+    "rule": "Cor do texto definida pela foto: área clara (luminância média > 0.55) usa texto_escuro; área escura usa branco. Fotos de estúdio (fundo cinza) sempre saem com texto preto.",
+    "threshold": 0.55,
+    "light_text": "branco",
+    "dark_text": "texto_escuro",
+    "mixed_low": 0.35,
+    "mixed_high": 0.62
+  },
+  "styles": {
+    "_doc": "Medidas em px no canvas 1080x1350, tiradas dos posts publicados. font: display|sans. line = entrelinha em px. tracking em em.",
+    "kicker": {
+      "font": "sans",
+      "size": 34,
+      "line": 40,
+      "caps": true,
+      "tracking": 0.18
+    },
+    "headline": {
+      "font": "display",
+      "size": 108,
+      "line": 100,
+      "caps": true,
+      "tracking": -0.02
+    },
+    "box_text": {
+      "font": "sans",
+      "size": 27,
+      "line": 37
+    },
+    "note": {
+      "font": "sans",
+      "size": 27,
+      "line": 37
+    },
+    "note_large": {
+      "font": "sans",
+      "size": 32,
+      "line": 42
+    },
+    "phrase_caps": {
+      "font": "display",
+      "size": 44,
+      "line": 46,
+      "caps": true
+    },
+    "manifesto_title": {
+      "font": "display",
+      "size": 66,
+      "line": 72,
+      "caps": true
+    },
+    "manifesto_text": {
+      "font": "sans",
+      "size": 27,
+      "line": 38
+    },
+    "frase": {
+      "font": "display",
+      "size": 60,
+      "line": 68
+    },
+    "benefit_title": {
+      "font": "display",
+      "size": 58,
+      "line": 64,
+      "caps": true
+    },
+    "benefit_text": {
+      "font": "sans",
+      "size": 26,
+      "line": 36
+    },
+    "signature_text": {
+      "font": "sans",
+      "size": 34,
+      "line": 44
+    },
+    "signature_tagline": {
+      "font": "display",
+      "size": 40,
+      "line": 48
+    },
+    "moodboard_time": {
+      "font": "display",
+      "size": 62,
+      "line": 66,
+      "caps": false
+    },
+    "moodboard_text": {
+      "font": "sans",
+      "size": 29,
+      "line": 39
+    }
+  },
+  "geometry": {
+    "_doc": "Posições em px no canvas do feed. Substitua pelas medidas dos posts da marca.",
+    "capa_manchete": {
+      "kicker_top": 132,
+      "headline_gap": 8,
+      "box": {
+        "width": 640,
+        "height": 108,
+        "top": 1030,
+        "radius": 22,
+        "stroke": 1.5,
+        "pad_x": 36
+      }
+    },
+    "foto_nota": {
+      "width": 430,
+      "large_width": 470,
+      "positions": {
+        "top_left": {
+          "left": 80,
+          "top": 112
+        },
+        "top_right": {
+          "right": 80,
+          "top": 112
+        },
+        "bottom_left": {
+          "left": 96,
+          "bottom": 130
+        },
+        "bottom_right": {
+          "right": 96,
+          "bottom": 130
+        },
+        "middle_left": {
+          "left": 140,
+          "middle": 675
+        },
+        "middle_right": {
+          "right": 96,
+          "middle": 675
+        }
+      },
+      "paragraph_gap": 34,
+      "phrase_gap": 30
+    },
+    "manifesto_preto": {
+      "left": 227,
+      "width": 560,
+      "title_gap": 6,
+      "paragraph_gap": 34
+    },
+    "manifesto_frase": {
+      "margin": 140
+    },
+    "manifesto_assinatura": {
+      "left": 120,
+      "text_top": 820,
+      "line": {
+        "y": 1150,
+        "x1": 120,
+        "x2": 740,
+        "stroke": 1.5
+      },
+      "icon": {
+        "width": 64,
+        "right": 110,
+        "bottom": 150
+      },
+      "tagline_gap": 24
+    },
+    "beneficio_duplo": {
+      "split": 675,
+      "margin": 100,
+      "text_width": 420,
+      "title_gap": 4,
+      "top_block_bottom": 590,
+      "bottom_block_top": 740
+    },
+    "moodboard_cena": {
+      "left": {
+        "scene": [0, 0, 680, 930],
+        "product": [698, 0, 382, 600],
+        "detail": [698, 618, 382, 312]
+      },
+      "right": {
+        "scene": [400, 0, 680, 930],
+        "product": [0, 0, 382, 600],
+        "detail": [0, 618, 382, 312]
+      },
+      "divider": {
+        "x1": 80,
+        "x2": 1000,
+        "y": 976,
+        "stroke": 1.5
+      },
+      "text": {
+        "left": 80,
+        "top": 1005,
+        "width": 920,
+        "gap": 10,
+        "paragraph_gap": 0
+      }
+    }
+  },
+  "limits": {
+    "_doc": "Limites que mantêm o texto na proporção dos posts publicados",
+    "headline_lines": 2,
+    "headline_chars_per_line": 18,
+    "kicker_chars": 20,
+    "manifesto_title_lines": 2,
+    "manifesto_title_chars_per_line": 18,
+    "benefit_title_lines": 2,
+    "benefit_title_chars_per_line": 14,
+    "note_chars": 190,
+    "manifesto_text_chars": 220,
+    "box_chars": 90,
+    "frase_chars": 70,
+    "benefit_text_chars": 90,
+    "slides_min": 2,
+    "slides_max": 10
+  }
+}

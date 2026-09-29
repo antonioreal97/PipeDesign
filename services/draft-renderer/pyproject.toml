@@ -1,0 +1,9 @@
+[project]
+name = "pipedesign-draft-renderer"
+version = "0.1.0"
+description = "Creative Plan (JSON) -> PPTX editável para importar no Canva"
+requires-python = ">=3.10"
+dependencies = ["python-pptx>=1.0,<2", "Pillow>=10", "numpy>=1.26"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

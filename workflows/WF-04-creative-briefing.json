@@ -1,0 +1,628 @@
+{
+  "id": "672251af-4dd2-4c9b-aae7-a18a124bcbbb",
+  "name": "WF-04 Creative Briefing",
+  "nodes": [
+    {
+      "id": "7cf0851d-b91f-4dac-a46b-1222730f7535",
+      "name": "A1 · Form Briefing",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "webhookId": "e64bb0ff-c9c6-48f0-ab51-2ddb3619194c",
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "formTitle": "Briefing criativo",
+        "formDescription": "Preencha a demanda como ela deve chegar à criação. Separe conceito, referências, produto, copy por tela e necessidades de foto. Depois use GERAR RASCUNHOS com o Job ID.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Marca",
+              "fieldType": "dropdown",
+              "requiredField": true,
+              "defaultValue": "exemplo",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "exemplo"
+                  }
+                ]
+              }
+            },
+            {
+              "fieldLabel": "Tipo de peça",
+              "fieldType": "dropdown",
+              "requiredField": true,
+              "defaultValue": "Carrossel",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Carrossel"
+                  }
+                ]
+              }
+            },
+            {
+              "fieldLabel": "Telas do carrossel",
+              "fieldType": "number",
+              "requiredField": true,
+              "placeholder": "5",
+              "defaultValue": "5"
+            },
+            {
+              "fieldLabel": "Canal",
+              "fieldType": "dropdown",
+              "requiredField": true,
+              "defaultValue": "Instagram Feed",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Instagram Feed"
+                  }
+                ]
+              }
+            },
+            {
+              "fieldLabel": "Motivo do post",
+              "fieldType": "dropdown",
+              "requiredField": true,
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Lançamento de coleção"
+                  },
+                  {
+                    "option": "Destaque de produto"
+                  },
+                  {
+                    "option": "Manifesto de marca"
+                  },
+                  {
+                    "option": "Campanha / promoção"
+                  },
+                  {
+                    "option": "Educativo"
+                  }
+                ]
+              }
+            },
+            {
+              "fieldLabel": "Título da demanda",
+              "fieldType": "text",
+              "requiredField": true,
+              "placeholder": "Ex.: Um dia inteiro com a mesma peça"
+            },
+            {
+              "fieldLabel": "Conceito criativo",
+              "fieldType": "textarea",
+              "requiredField": true,
+              "placeholder": "Resuma a ideia da peça e a narrativa. Ex.: acompanhar o mesmo homem, com a mesma polo, do pré-treino ao jantar."
+            },
+            {
+              "fieldLabel": "Mensagem principal",
+              "fieldType": "textarea",
+              "requiredField": true,
+              "placeholder": "O que a pessoa deve entender ao terminar o carrossel?"
+            },
+            {
+              "fieldLabel": "Status da copy",
+              "fieldType": "dropdown",
+              "requiredField": true,
+              "defaultValue": "Aprovada — não alterar",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Aprovada — não alterar"
+                  },
+                  {
+                    "option": "Pode revisar mantendo o sentido"
+                  },
+                  {
+                    "option": "Rascunho — pode desenvolver"
+                  }
+                ]
+              }
+            },
+            {
+              "fieldLabel": "Roteiro por tela",
+              "fieldType": "textarea",
+              "requiredField": true,
+              "placeholder": "Use exatamente: Tela 1: ...\\nTela 2: ...\\nTela 3: ..."
+            },
+            {
+              "fieldLabel": "CTA / fechamento",
+              "fieldType": "text",
+              "requiredField": false,
+              "placeholder": "Opcional. Ex.: Conheça a Polo Básica."
+            },
+            {
+              "fieldLabel": "Referências visuais (uma URL por linha)",
+              "fieldType": "textarea",
+              "requiredField": false,
+              "placeholder": "https://www.instagram.com/p/.../\\nhttps://www.instagram.com/p/.../"
+            },
+            {
+              "fieldLabel": "Nome do produto",
+              "fieldType": "text",
+              "requiredField": false,
+              "placeholder": "Obrigatório para “Destaque de produto”. Ex.: Polo Básica"
+            },
+            {
+              "fieldLabel": "SKU / código do produto",
+              "fieldType": "text",
+              "requiredField": false,
+              "placeholder": "Ex.: EX-001-CINZA"
+            },
+            {
+              "fieldLabel": "Cor / variação",
+              "fieldType": "text",
+              "requiredField": false,
+              "placeholder": "Ex.: Cinza"
+            },
+            {
+              "fieldLabel": "Link do produto",
+              "fieldType": "text",
+              "requiredField": false,
+              "placeholder": "https://www.suamarca.com.br/produto/..."
+            },
+            {
+              "fieldLabel": "Abordagem visual",
+              "fieldType": "checkbox",
+              "requiredField": true,
+              "limitSelection": "range",
+              "minSelections": 1,
+              "maxSelections": 4,
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Editorial"
+                  },
+                  {
+                    "option": "Foto dominante"
+                  },
+                  {
+                    "option": "Pouco texto"
+                  },
+                  {
+                    "option": "Close de produto"
+                  }
+                ]
+              }
+            },
+            {
+              "fieldLabel": "Continuidade de modelo/personagem",
+              "fieldType": "dropdown",
+              "requiredField": true,
+              "defaultValue": "Não se aplica",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Não se aplica"
+                  },
+                  {
+                    "option": "Mesma pessoa em todas as telas"
+                  },
+                  {
+                    "option": "Pode variar entre as telas"
+                  }
+                ]
+              }
+            },
+            {
+              "fieldLabel": "Cenas e assets obrigatórios",
+              "fieldType": "textarea",
+              "requiredField": false,
+              "placeholder": "Ex.: mesmo homem usando a Polo Básica em casa, treino, trabalho, almoço, tênis e jantar."
+            },
+            {
+              "fieldLabel": "Se faltarem fotos",
+              "fieldType": "dropdown",
+              "requiredField": true,
+              "defaultValue": "Interromper e pedir os assets",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Interromper e pedir os assets"
+                  },
+                  {
+                    "option": "Continuar só com alternativas aprovadas"
+                  }
+                ]
+              }
+            },
+            {
+              "fieldLabel": "Evitar sujeito no centro",
+              "fieldType": "checkbox",
+              "requiredField": false,
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Evitar sujeito no centro"
+                  }
+                ]
+              }
+            },
+            {
+              "fieldLabel": "Outras restrições",
+              "fieldType": "textarea",
+              "requiredField": false,
+              "placeholder": "Somente restrições adicionais. Não cole aqui copy, links ou orientação de cenas."
+            }
+          ]
+        },
+        "responseMode": "lastNode",
+        "options": {
+          "path": "briefing",
+          "buttonLabel": "Salvar briefing",
+          "appendAttribution": false
+        }
+      }
+    },
+    {
+      "id": "26753392-b870-460b-a7a8-91698199d35d",
+      "name": "B1 · Map JobBrief",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Contrato JobBrief do WF-04. Usado nos testes e inlined no Code node do n8n\n// (o build remove a palavra `export` antes de colar).\n\nconst SLIDES_MIN = 2;\nconst SLIDES_MAX = 10;\nconst UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;\n\nfunction uuidV4() {\n  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (ch) => {\n    const n = Math.random() * 16 | 0;\n    const v = ch === 'x' ? n : (n & 0x3 | 0x8);\n    return v.toString(16);\n  });\n}\n\n// Slug da marca: nome da pasta em brands/ e coluna brands.slug.\nconst BRAND_SLUG_RE = /^[a-z0-9-]+$/;\n\nconst CONTENT_TYPE = {\n  Carrossel: 'carousel',\n  carousel: 'carousel',\n};\n\nconst CHANNEL = {\n  'Instagram Feed': 'instagram_feed',\n  instagram_feed: 'instagram_feed',\n};\n\nconst OBJECTIVE = {\n  'Lançamento de coleção': 'collection_launch',\n  collection_launch: 'collection_launch',\n  'Destaque de produto': 'product_highlight',\n  product_highlight: 'product_highlight',\n  'Manifesto de marca': 'brand_manifesto',\n  brand_manifesto: 'brand_manifesto',\n  'Campanha / promoção': 'campaign_promo',\n  campaign_promo: 'campaign_promo',\n  Educativo: 'educational',\n  educational: 'educational',\n};\n\nconst VISUAL_DIRECTION = {\n  Editorial: 'editorial',\n  editorial: 'editorial',\n  'Foto dominante': 'photo_dominant',\n  photo_dominant: 'photo_dominant',\n  'Pouco texto': 'low_text',\n  low_text: 'low_text',\n  'Close de produto': 'product_closeup',\n  product_closeup: 'product_closeup',\n};\n\nconst AVOID_CENTER_LABEL = 'Evitar sujeito no centro';\n\nconst COPY_STATUS = {\n  'Aprovada — não alterar': 'approved_locked',\n  'Pode revisar mantendo o sentido': 'review_keep_meaning',\n  'Rascunho — pode desenvolver': 'draft_expandable',\n  approved_locked: 'approved_locked',\n  review_keep_meaning: 'review_keep_meaning',\n  draft_expandable: 'draft_expandable',\n};\n\nconst SUBJECT_CONTINUITY = {\n  'Não se aplica': 'not_applicable',\n  'Mesma pessoa em todas as telas': 'same_person_all_slides',\n  'Pode variar entre as telas': 'may_vary',\n  not_applicable: 'not_applicable',\n  same_person_all_slides: 'same_person_all_slides',\n  may_vary: 'may_vary',\n};\n\nconst MISSING_ASSET_FALLBACK = {\n  'Interromper e pedir os assets': 'stop_and_request_assets',\n  'Continuar só com alternativas aprovadas': 'approved_alternatives_only',\n  stop_and_request_assets: 'stop_and_request_assets',\n  approved_alternatives_only: 'approved_alternatives_only',\n};\n\nfunction pick(input, keys) {\n  if (!input || typeof input !== 'object') return undefined;\n  for (const key of keys) {\n    if (input[key] !== undefined && input[key] !== null && input[key] !== '') {\n      return input[key];\n    }\n  }\n  return undefined;\n}\n\nfunction asList(value) {\n  if (value === undefined || value === null || value === '') return [];\n  if (Array.isArray(value)) {\n    return value.flatMap((item) => asList(item));\n  }\n  if (typeof value === 'object') {\n    return Object.entries(value)\n      .filter(([, selected]) => selected === true || selected === 'true' || selected === 1)\n      .map(([label]) => label);\n  }\n  if (typeof value === 'string') {\n    return value.split(',').map((part) => part.trim()).filter(Boolean);\n  }\n  return [String(value)];\n}\n\nfunction isChecked(value, label) {\n  if (value === true || value === 'true' || value === 1) return true;\n  const list = asList(value);\n  return list.includes(label) || list.includes('true') || list.includes('Sim');\n}\n\nfunction mapEnum(value, table, field) {\n  if (value === undefined || value === null || value === '') {\n    return { error: field + ' é obrigatório' };\n  }\n  const raw = typeof value === 'string' ? value.trim() : value;\n  const mapped = table[raw];\n  if (!mapped) {\n    return { error: field + ' inválido: ' + String(raw) };\n  }\n  return { value: mapped };\n}\n\nfunction parseBrandSlug(value) {\n  if (value === undefined || value === null || value === '') {\n    return { error: 'marca é obrigatório' };\n  }\n  const raw = String(value).trim();\n  if (!BRAND_SLUG_RE.test(raw)) {\n    return { error: 'marca inválida: ' + raw + ' (use o slug da pasta brands/, ex.: exemplo)' };\n  }\n  return { value: raw };\n}\n\nfunction mapVisualDirection(value) {\n  const labels = asList(value);\n  const mapped = [];\n  const seen = new Set();\n  const unknown = [];\n  for (const label of labels) {\n    const code = VISUAL_DIRECTION[label];\n    if (!code) {\n      unknown.push(label);\n      continue;\n    }\n    if (!seen.has(code)) {\n      seen.add(code);\n      mapped.push(code);\n    }\n  }\n  if (unknown.length) {\n    return { error: 'abordagem visual inválida: ' + unknown.join(', ') };\n  }\n  if (mapped.length === 0) {\n    return { error: 'abordagem visual é obrigatória (escolha ao menos uma)' };\n  }\n  return { value: mapped };\n}\n\nfunction parseSlides(value) {\n  if (value === undefined || value === null || value === '') {\n    return { error: 'telas do carrossel é obrigatório' };\n  }\n  const n = typeof value === 'number' ? value : Number(String(value).trim());\n  if (!Number.isInteger(n)) {\n    return { error: 'telas do carrossel deve ser um inteiro' };\n  }\n  if (n < SLIDES_MIN || n > SLIDES_MAX) {\n    return { error: 'telas do carrossel deve estar entre ' + SLIDES_MIN + ' e ' + SLIDES_MAX };\n  }\n  return { value: n };\n}\n\nfunction cleanText(value) {\n  return typeof value === 'string' ? value.trim() : '';\n}\n\nfunction parseUrl(value, field) {\n  const raw = cleanText(value).replace(/\\\\&/g, '&');\n  if (!raw) return { value: undefined };\n  // O Code node do n8n roda em sandbox e não garante o construtor global URL.\n  // Validação deliberadamente portátil: protocolo http(s), sem espaços e com host.\n  if (!/^https?:\\/\\/[^/\\s?#]+(?:[/?#][^\\s]*)?$/i.test(raw)) {\n    return { error: field + ' deve ser uma URL http(s) válida' };\n  }\n  return { value: raw };\n}\n\nfunction parseReferenceUrls(value) {\n  if (value === undefined || value === null || value === '') return { value: undefined };\n  if (Array.isArray(value)) {\n    const parsed = value.map((item) => parseUrl(item, 'referência visual'));\n    const error = parsed.find((item) => item.error);\n    return error || { value: [...new Set(parsed.map((item) => item.value).filter(Boolean))] };\n  }\n  const urls = [];\n  for (const sourceLine of String(value).split(/\\r?\\n/)) {\n    let line = sourceLine.trim();\n    if (!line) continue;\n    const markdown = line.match(/\\[[^\\]]*\\]\\((https?:\\/\\/[^)]+)\\)/i);\n    if (markdown) line = markdown[1];\n    line = line.replace(/^[-*]\\s+/, '').replace(/^<|>$/g, '');\n    const parsed = parseUrl(line, 'referência visual');\n    if (parsed.error) return parsed;\n    urls.push(parsed.value);\n  }\n  return { value: urls.length ? [...new Set(urls)] : undefined };\n}\n\nfunction parseSlideCopy(value, slides) {\n  if (value === undefined || value === null || value === '') return { value: undefined };\n  let items;\n  if (Array.isArray(value)) {\n    items = value.map((item) => ({\n      slide: Number(item && item.slide),\n      copy: cleanText(item && item.copy),\n    }));\n  } else {\n    const raw = String(value).trim();\n    const matches = [...raw.matchAll(/^\\s*Tela\\s+(\\d+)\\s*:\\s*(.*)$/gim)];\n    if (!matches.length) {\n      return { error: 'roteiro por tela deve usar o formato “Tela 1: …”, “Tela 2: …”' };\n    }\n    if (raw.slice(0, matches[0].index).trim()) {\n      return { error: 'roteiro por tela contém texto antes de “Tela 1:”' };\n    }\n    items = matches.map((match, index) => {\n      const bodyStart = match.index + match[0].length;\n      const bodyEnd = index + 1 < matches.length ? matches[index + 1].index : raw.length;\n      const copy = [match[2].trim(), raw.slice(bodyStart, bodyEnd).trim()].filter(Boolean).join('\\n');\n      return { slide: Number(match[1]), copy };\n    });\n  }\n  if (items.length !== slides) {\n    return { error: 'roteiro por tela deve conter exatamente ' + slides + ' telas' };\n  }\n  for (let index = 0; index < items.length; index += 1) {\n    const expected = index + 1;\n    if (items[index].slide !== expected) {\n      return { error: 'roteiro por tela deve ser sequencial; esperava Tela ' + expected };\n    }\n    if (!items[index].copy) {\n      return { error: 'Tela ' + expected + ' está sem copy' };\n    }\n  }\n  return { value: items };\n}\n\nfunction buildAssetConstraints(input) {\n  const avoidCenter = isChecked(\n    pick(input, ['avoid_center', AVOID_CENTER_LABEL, 'Evitar sujeito no centro']),\n    AVOID_CENTER_LABEL,\n  );\n  const notesRaw = pick(input, ['notes', 'Outras restrições', 'asset_constraints.notes']);\n  const notes = typeof notesRaw === 'string' ? notesRaw.trim() : '';\n  const constraints = {};\n  if (avoidCenter) constraints.avoid_subject_position = ['center'];\n  if (notes) constraints.notes = notes;\n  return Object.keys(constraints).length ? constraints : undefined;\n}\n\nfunction validateJobBrief(brief) {\n  const errors = [];\n  if (!brief || typeof brief !== 'object') {\n    return { ok: false, errors: ['brief ausente'] };\n  }\n  if (typeof brief.job_id !== 'string' || !UUID_RE.test(brief.job_id)) {\n    errors.push('job_id deve ser UUID');\n  }\n  if (typeof brief.brand_id !== 'string' || !brief.brand_id.trim()) {\n    errors.push('brand_id é obrigatório');\n  }\n  if (brief.content_type !== 'carousel') {\n    errors.push('content_type deve ser carousel');\n  }\n  if (!Number.isInteger(brief.slides) || brief.slides < SLIDES_MIN || brief.slides > SLIDES_MAX) {\n    errors.push('slides deve ser inteiro entre ' + SLIDES_MIN + ' e ' + SLIDES_MAX);\n  }\n  if (brief.channel !== 'instagram_feed') {\n    errors.push('channel deve ser instagram_feed');\n  }\n  const validObjectives = [...new Set(Object.values(OBJECTIVE))];\n  if (!validObjectives.includes(brief.objective)) {\n    errors.push('objective inválido');\n  }\n  if (!Array.isArray(brief.visual_direction) || brief.visual_direction.length === 0) {\n    errors.push('visual_direction é obrigatório');\n  } else {\n    const valid = new Set(Object.values(VISUAL_DIRECTION));\n    const seen = new Set();\n    for (const item of brief.visual_direction) {\n      if (!valid.has(item)) errors.push('visual_direction inválida: ' + item);\n      if (seen.has(item)) errors.push('visual_direction duplicada: ' + item);\n      seen.add(item);\n    }\n  }\n  if (brief.status !== 'READY_FOR_PLANNING') {\n    errors.push('status deve ser READY_FOR_PLANNING');\n  }\n  if (typeof brief.created_at !== 'string' || Number.isNaN(Date.parse(brief.created_at))) {\n    errors.push('created_at deve ser data ISO-8601');\n  }\n  if (brief.asset_constraints !== undefined) {\n    const ac = brief.asset_constraints;\n    if (!ac || typeof ac !== 'object' || Array.isArray(ac)) {\n      errors.push('asset_constraints deve ser objeto');\n    } else {\n      const keys = Object.keys(ac);\n      if (keys.length === 0) errors.push('asset_constraints vazio deve ser omitido');\n      for (const key of keys) {\n        if (key !== 'avoid_subject_position' && key !== 'notes') {\n          errors.push('asset_constraints.' + key + ' não é permitido');\n        }\n      }\n      if (ac.avoid_subject_position !== undefined) {\n        if (!Array.isArray(ac.avoid_subject_position) || ac.avoid_subject_position.length === 0) {\n          errors.push('avoid_subject_position inválido');\n        } else {\n          const allowed = new Set(['center', 'left', 'right']);\n          for (const pos of ac.avoid_subject_position) {\n            if (!allowed.has(pos)) errors.push('avoid_subject_position inválido: ' + pos);\n          }\n        }\n      }\n      if (ac.notes !== undefined && (typeof ac.notes !== 'string' || !ac.notes.trim())) {\n        errors.push('asset_constraints.notes deve ser string não vazia');\n      }\n    }\n  }\n  if (brief.campaign !== undefined) {\n    const campaign = brief.campaign;\n    if (!campaign || typeof campaign !== 'object' || Array.isArray(campaign)) {\n      errors.push('campaign deve ser objeto');\n    } else {\n      const allowedCampaign = new Set(['title', 'concept', 'key_message', 'cta', 'copy_status']);\n      for (const key of Object.keys(campaign)) {\n        if (!allowedCampaign.has(key)) errors.push('campaign.' + key + ' não é permitido');\n      }\n      for (const key of ['title', 'concept', 'key_message', 'cta']) {\n        if (campaign[key] !== undefined && (typeof campaign[key] !== 'string' || !campaign[key].trim())) {\n          errors.push('campaign.' + key + ' deve ser string não vazia');\n        }\n      }\n      if (campaign.copy_status !== undefined && !new Set(Object.values(COPY_STATUS)).has(campaign.copy_status)) {\n        errors.push('campaign.copy_status inválido');\n      }\n    }\n  }\n  if (brief.references !== undefined) {\n    if (!Array.isArray(brief.references) || !brief.references.length) {\n      errors.push('references deve ser array não vazio');\n    } else {\n      for (const reference of brief.references) {\n        if (parseUrl(reference, 'references').error) errors.push('references contém URL inválida');\n      }\n    }\n  }\n  if (brief.product !== undefined) {\n    const product = brief.product;\n    if (!product || typeof product !== 'object' || Array.isArray(product)) {\n      errors.push('product deve ser objeto');\n    } else {\n      const allowedProduct = new Set(['name', 'sku', 'color', 'url']);\n      for (const key of Object.keys(product)) {\n        if (!allowedProduct.has(key)) errors.push('product.' + key + ' não é permitido');\n      }\n      for (const key of ['name', 'sku', 'color']) {\n        if (product[key] !== undefined && (typeof product[key] !== 'string' || !product[key].trim())) {\n          errors.push('product.' + key + ' deve ser string não vazia');\n        }\n      }\n      if (product.url !== undefined && parseUrl(product.url, 'product.url').error) {\n        errors.push('product.url inválida');\n      }\n    }\n  }\n  if (brief.objective === 'product_highlight' && !brief.product) {\n    errors.push('product é obrigatório para destaque de produto');\n  }\n  if (brief.slide_copy !== undefined) {\n    const parsed = parseSlideCopy(brief.slide_copy, brief.slides);\n    if (parsed.error) errors.push(parsed.error);\n  }\n  if (brief.production !== undefined) {\n    const production = brief.production;\n    if (!production || typeof production !== 'object' || Array.isArray(production)) {\n      errors.push('production deve ser objeto');\n    } else {\n      const allowedProduction = new Set(['subject_continuity', 'asset_requirements', 'fallback_if_missing_assets']);\n      for (const key of Object.keys(production)) {\n        if (!allowedProduction.has(key)) errors.push('production.' + key + ' não é permitido');\n      }\n      if (production.subject_continuity !== undefined && !new Set(Object.values(SUBJECT_CONTINUITY)).has(production.subject_continuity)) {\n        errors.push('production.subject_continuity inválido');\n      }\n      if (production.asset_requirements !== undefined && (typeof production.asset_requirements !== 'string' || !production.asset_requirements.trim())) {\n        errors.push('production.asset_requirements deve ser string não vazia');\n      }\n      if (production.fallback_if_missing_assets !== undefined && !new Set(Object.values(MISSING_ASSET_FALLBACK)).has(production.fallback_if_missing_assets)) {\n        errors.push('production.fallback_if_missing_assets inválido');\n      }\n    }\n  }\n  const allowed = new Set([\n    'job_id', 'brand_id', 'content_type', 'slides', 'channel',\n    'objective', 'visual_direction', 'campaign', 'references', 'product',\n    'slide_copy', 'production', 'asset_constraints', 'status', 'created_at',\n  ]);\n  for (const key of Object.keys(brief)) {\n    if (!allowed.has(key)) errors.push('campo extra: ' + key);\n  }\n  return errors.length ? { ok: false, errors } : { ok: true, errors: [] };\n}\n\nfunction buildJobBriefFromForm(input, opts) {\n  const jobId = opts && opts.jobId;\n  const createdAt = opts && opts.createdAt;\n  if (!jobId || !UUID_RE.test(jobId)) {\n    return { ok: false, error: { message: 'job_id interno inválido', context: { job_id: jobId } } };\n  }\n  if (!createdAt) {\n    return { ok: false, error: { message: 'created_at interno ausente' } };\n  }\n\n  const brand = parseBrandSlug(pick(input, ['brand_id', 'Marca']));\n  const contentType = mapEnum(pick(input, ['content_type', 'Tipo de peça']), CONTENT_TYPE, 'tipo de peça');\n  const channel = mapEnum(pick(input, ['channel', 'Canal']), CHANNEL, 'canal');\n  const objective = mapEnum(pick(input, ['objective', 'Motivo do post']), OBJECTIVE, 'motivo do post');\n  const slides = parseSlides(pick(input, ['slides', 'Telas do carrossel']));\n  const visual = mapVisualDirection(pick(input, ['visual_direction', 'Abordagem visual']));\n\n  const fieldErrors = [brand, contentType, channel, objective, slides, visual]\n    .filter((part) => part.error)\n    .map((part) => part.error);\n  if (fieldErrors.length) {\n    return {\n      ok: false,\n      error: {\n        message: fieldErrors.join('; '),\n        context: { fields: fieldErrors },\n      },\n    };\n  }\n\n  const brief = {\n    job_id: jobId,\n    brand_id: brand.value,\n    content_type: contentType.value,\n    slides: slides.value,\n    channel: channel.value,\n    objective: objective.value,\n    visual_direction: visual.value,\n    status: 'READY_FOR_PLANNING',\n    created_at: createdAt,\n  };\n\n  const campaign = {};\n  const title = cleanText(pick(input, ['campaign.title', 'Título da demanda']));\n  const concept = cleanText(pick(input, ['campaign.concept', 'Conceito criativo']));\n  const keyMessage = cleanText(pick(input, ['campaign.key_message', 'Mensagem principal']));\n  const cta = cleanText(pick(input, ['campaign.cta', 'CTA / fechamento']));\n  const copyStatusRaw = pick(input, ['campaign.copy_status', 'Status da copy']);\n  if (title) campaign.title = title;\n  if (concept) campaign.concept = concept;\n  if (keyMessage) campaign.key_message = keyMessage;\n  if (cta) campaign.cta = cta;\n  if (copyStatusRaw !== undefined) {\n    const copyStatus = mapEnum(copyStatusRaw, COPY_STATUS, 'status da copy');\n    if (copyStatus.error) return { ok: false, error: { message: copyStatus.error, context: { fields: [copyStatus.error] } } };\n    campaign.copy_status = copyStatus.value;\n  }\n  if (Object.keys(campaign).length) brief.campaign = campaign;\n\n  const references = parseReferenceUrls(pick(input, ['references', 'Referências visuais (uma URL por linha)']));\n  if (references.error) return { ok: false, error: { message: references.error, context: { fields: [references.error] } } };\n  if (references.value) brief.references = references.value;\n\n  const product = {};\n  const productName = cleanText(pick(input, ['product.name', 'Nome do produto']));\n  const productSku = cleanText(pick(input, ['product.sku', 'SKU / código do produto']));\n  const productColor = cleanText(pick(input, ['product.color', 'Cor / variação']));\n  const productUrl = parseUrl(pick(input, ['product.url', 'Link do produto']), 'link do produto');\n  if (productUrl.error) return { ok: false, error: { message: productUrl.error, context: { fields: [productUrl.error] } } };\n  if (productName) product.name = productName;\n  if (productSku) product.sku = productSku;\n  if (productColor) product.color = productColor;\n  if (productUrl.value) product.url = productUrl.value;\n  if (Object.keys(product).length) brief.product = product;\n\n  const slideCopy = parseSlideCopy(pick(input, ['slide_copy', 'Roteiro por tela']), slides.value);\n  if (slideCopy.error) return { ok: false, error: { message: slideCopy.error, context: { fields: [slideCopy.error] } } };\n  if (slideCopy.value) brief.slide_copy = slideCopy.value;\n\n  const production = {};\n  const continuityRaw = pick(input, ['production.subject_continuity', 'Continuidade de modelo/personagem']);\n  const fallbackRaw = pick(input, ['production.fallback_if_missing_assets', 'Se faltarem fotos']);\n  const assetRequirements = cleanText(pick(input, ['production.asset_requirements', 'Cenas e assets obrigatórios']));\n  if (continuityRaw !== undefined) {\n    const continuity = mapEnum(continuityRaw, SUBJECT_CONTINUITY, 'continuidade de modelo/personagem');\n    if (continuity.error) return { ok: false, error: { message: continuity.error, context: { fields: [continuity.error] } } };\n    production.subject_continuity = continuity.value;\n  }\n  if (assetRequirements) production.asset_requirements = assetRequirements;\n  if (fallbackRaw !== undefined) {\n    const fallback = mapEnum(fallbackRaw, MISSING_ASSET_FALLBACK, 'fallback de assets');\n    if (fallback.error) return { ok: false, error: { message: fallback.error, context: { fields: [fallback.error] } } };\n    production.fallback_if_missing_assets = fallback.value;\n  }\n  if (Object.keys(production).length) brief.production = production;\n\n  const constraints = buildAssetConstraints(input);\n  if (constraints) brief.asset_constraints = constraints;\n\n  const check = validateJobBrief(brief);\n  if (!check.ok) {\n    return {\n      ok: false,\n      error: {\n        message: check.errors.join('; '),\n        context: { fields: check.errors },\n      },\n    };\n  }\n  return { ok: true, brief };\n}\n\n\nconst ROUTE = { NEXT: 0, FAIL: 2 };\n\nfunction fail(stage, code, message, opts = {}) {\n  return [{\n    json: {\n      route: ROUTE.FAIL,\n      step: stage,\n      ok: false,\n      error: {\n        status: 'failed',\n        stage,\n        code,\n        message,\n        retryable: Boolean(opts.retryable),\n        context: opts.context || {},\n      },\n    },\n  }];\n}\n\nconst form = $input.first().json;\nconst result = buildJobBriefFromForm(form, {\n  jobId: uuidV4(),\n  createdAt: new Date().toISOString(),\n});\nif (!result.ok) {\n  return fail('map_brief', 'BRIEF_INVALID', result.error.message, { context: result.error.context || {} });\n}\nconst brief = result.brief;\nreturn [{\n  json: {\n    route: ROUTE.NEXT,\n    step: 'map_brief',\n    ok: true,\n    job_id: brief.job_id,\n    brand_id: brief.brand_id,\n    status: brief.status,\n    content_type: brief.content_type,\n    brief,\n    brief_path: '/workspace/jobs/' + brief.job_id + '.json',\n  },\n}];\n"
+      }
+    },
+    {
+      "id": "1e508889-074b-463d-aeb6-4dd32cdeb0a4",
+      "name": "B2 · Brief OK?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        480,
+        300
+      ],
+      "parameters": {
+        "mode": "expression",
+        "numberOutputs": 3,
+        "output": "={{ $json.route }}",
+        "looseTypeValidation": false
+      }
+    },
+    {
+      "id": "c2df3101-13b2-4d7d-a5e5-4d90a55b5949",
+      "name": "C1 · Insert Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        720,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "a8dba701-d4fc-4036-a2e6-38eae679d54f",
+          "name": "PipeDesign Postgres"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO jobs (id, brand_id, status, content_type, brief_json)\nSELECT $1::uuid, b.id, $2, $3, $4::jsonb\nFROM brands b\nWHERE b.slug = $5\nRETURNING id, brand_id, status, content_type, brief_json;",
+        "options": {
+          "queryBatching": "independently",
+          "queryReplacement": "={{ [$json.job_id, $json.status, $json.content_type, $json.brief, $json.brand_id] }}"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "6bbcc7f3-9b06-474b-a8f3-7415c18013ec",
+      "name": "C2 · Check Insert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const ROUTE = { NEXT: 0, FAIL: 2 };\n\nfunction fail(stage, code, message, opts = {}) {\n  return [{\n    json: {\n      route: ROUTE.FAIL,\n      step: stage,\n      ok: false,\n      error: {\n        status: 'failed',\n        stage,\n        code,\n        message,\n        retryable: Boolean(opts.retryable),\n        context: opts.context || {},\n      },\n    },\n  }];\n}\n\nconst mapped = $('B1 · Map JobBrief').first().json;\nconst item = $input.first();\nconst payload = item && item.json ? item.json : {};\n\nif (payload.error) {\n  const detail = typeof payload.error === 'string' ? payload.error : (payload.error.message || JSON.stringify(payload.error));\n  return fail('persist_job', 'BRIEF_PERSIST_FAILED', 'Falha ao gravar o job no Postgres: ' + detail, {\n    retryable: true,\n    context: { brand_id: mapped.brand_id, job_id: mapped.job_id },\n  });\n}\n\nif (!payload.id) {\n  return fail('persist_job', 'BRAND_NOT_FOUND',\n    'Marca não encontrada no banco: ' + mapped.brand_id + '. Rode db/migrate.sh e insira a marca na tabela brands.',\n    { context: { brand_id: mapped.brand_id, job_id: mapped.job_id } });\n}\n\nconst binary = await this.helpers.prepareBinaryData(\n  Buffer.from(JSON.stringify(mapped.brief, null, 2) + '\\n', 'utf8'),\n  mapped.job_id + '.json',\n  'application/json',\n);\n\nreturn [{\n  json: {\n    route: ROUTE.NEXT,\n    step: 'persist_job',\n    ok: true,\n    job_id: mapped.job_id,\n    brand_id: mapped.brand_id,\n    status: mapped.status,\n    content_type: mapped.content_type,\n    brief: mapped.brief,\n    brief_path: mapped.brief_path,\n    db_id: payload.id,\n  },\n  binary: { data: binary },\n}];\n"
+      }
+    },
+    {
+      "id": "985903d7-f4ba-4cc4-a862-911c2d5eb66d",
+      "name": "C3 · Insert OK?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1200,
+        300
+      ],
+      "parameters": {
+        "mode": "expression",
+        "numberOutputs": 3,
+        "output": "={{ $json.route }}",
+        "looseTypeValidation": false
+      }
+    },
+    {
+      "id": "51efc6b6-1cb4-46aa-a196-4e8f7c4c8eb3",
+      "name": "D1 · Write brief.json",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        1440,
+        300
+      ],
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ $json.brief_path }}",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "1dcd658c-5ddb-4e35-aba3-239c37708b28",
+      "name": "D2 · Check Write",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const ROUTE = { NEXT: 0, FAIL: 2 };\n\nfunction fail(stage, code, message, opts = {}) {\n  return [{\n    json: {\n      route: ROUTE.FAIL,\n      step: stage,\n      ok: false,\n      error: {\n        status: 'failed',\n        stage,\n        code,\n        message,\n        retryable: Boolean(opts.retryable),\n        context: opts.context || {},\n      },\n    },\n  }];\n}\n\nconst mapped = $('B1 · Map JobBrief').first().json;\nconst item = $input.first();\nconst payload = item && item.json ? item.json : {};\n\nif (payload.error) {\n  const detail = typeof payload.error === 'string' ? payload.error : (payload.error.message || JSON.stringify(payload.error));\n  return fail('write_brief', 'BRIEF_WRITE_FAILED',\n    'Job gravado no Postgres, mas falhou escrever ' + mapped.brief_path + ': ' + detail,\n    { retryable: true, context: { job_id: mapped.job_id, brief_path: mapped.brief_path } });\n}\n\nconst written = payload.fileName || mapped.brief_path;\nreturn [{\n  json: {\n    route: ROUTE.NEXT,\n    step: 'write_brief',\n    ok: true,\n    job_id: mapped.job_id,\n    brand_id: mapped.brand_id,\n    status: mapped.status,\n    content_type: mapped.content_type,\n    brief: mapped.brief,\n    brief_path: mapped.brief_path,\n    fileName: written,\n  },\n}];\n"
+      }
+    },
+    {
+      "id": "2cecfbd6-5467-4299-a7f2-c0c6d0e32e55",
+      "name": "D3 · Write OK?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1920,
+        300
+      ],
+      "parameters": {
+        "mode": "expression",
+        "numberOutputs": 3,
+        "output": "={{ $json.route }}",
+        "looseTypeValidation": false
+      }
+    },
+    {
+      "id": "5aeec5a2-8500-4945-a970-99b4c5f7678c",
+      "name": "E1 · Form Ending",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.3,
+      "webhookId": "cb0a638e-eb27-4f00-ae51-063c1db16848",
+      "position": [
+        2160,
+        300
+      ],
+      "parameters": {
+        "operation": "completion",
+        "respondWith": "text",
+        "completionTitle": "Briefing salvo",
+        "completionMessage": "={{ \"Job \" + $json.job_id + \" em READY_FOR_PLANNING.\\n\\nArquivo: \" + $json.brief_path + \"\\n\\nPróximo passo: http://127.0.0.1:5678/form/gerar-rascunhos\" }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "d25b4cb1-99a2-4b37-ad7c-f486669e26a4",
+      "name": "X · Stop With Error",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        660
+      ],
+      "parameters": {
+        "errorType": "errorObject",
+        "errorObject": "={{ JSON.stringify($json.error) }}"
+      }
+    },
+    {
+      "id": "6f5d1264-a5e3-41ef-aa5f-6642d174c597",
+      "name": "Nota · Como usar",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -180
+      ],
+      "parameters": {
+        "content": "## WF-04 Creative Briefing\nForm em http://127.0.0.1:5678/form/briefing (ative o workflow).\n\n**Antes:** `db/migrate.sh` e credencial **PipeDesign Postgres** (`host: postgres`, banco `pipedesign`).\n\nUm envio = um carrossel. O JSON vai para `jobs.brief_json` e `/workspace/jobs/{id}.json`. Status: `READY_FOR_PLANNING`. A página final aponta para o WF-05; o disparo continua manual.",
+        "width": 720,
+        "height": 340,
+        "color": 5
+      }
+    },
+    {
+      "id": "c1d8a9a3-ca39-4702-a2ee-393791996f39",
+      "name": "Nota · B",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        200,
+        0
+      ],
+      "parameters": {
+        "content": "### B · Mapear e validar\nRótulos em português viram o JobBrief (`schemas/job-brief.schema.json`). Falha = `BRIEF_INVALID`.",
+        "width": 680,
+        "height": 280,
+        "color": 7
+      }
+    },
+    {
+      "id": "6759a6e4-4556-4cea-a8ca-e988f7dced10",
+      "name": "Nota · C",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        680,
+        0
+      ],
+      "parameters": {
+        "content": "### C · Postgres\n`INSERT … SELECT` pelo slug da marca. 0 linhas = `BRAND_NOT_FOUND`. Erro de conexão = `BRIEF_PERSIST_FAILED`.",
+        "width": 680,
+        "height": 280,
+        "color": 7
+      }
+    },
+    {
+      "id": "ab8dfaca-8356-4453-a4b6-76441c8c756b",
+      "name": "Nota · D/E",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        0
+      ],
+      "parameters": {
+        "content": "### D–E · Arquivo e tela final\nEscreve `brief.json`. Se o arquivo falhar, o job no banco permanece. A página do Form confirma o `job_id`.",
+        "width": 920,
+        "height": 280,
+        "color": 7
+      }
+    }
+  ],
+  "connections": {
+    "A1 · Form Briefing": {
+      "main": [
+        [
+          {
+            "node": "B1 · Map JobBrief",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "B1 · Map JobBrief": {
+      "main": [
+        [
+          {
+            "node": "B2 · Brief OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "B2 · Brief OK?": {
+      "main": [
+        [
+          {
+            "node": "C1 · Insert Job",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [],
+        [
+          {
+            "node": "X · Stop With Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "C1 · Insert Job": {
+      "main": [
+        [
+          {
+            "node": "C2 · Check Insert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "C2 · Check Insert": {
+      "main": [
+        [
+          {
+            "node": "C3 · Insert OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "C3 · Insert OK?": {
+      "main": [
+        [
+          {
+            "node": "D1 · Write brief.json",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [],
+        [
+          {
+            "node": "X · Stop With Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "D1 · Write brief.json": {
+      "main": [
+        [
+          {
+            "node": "D2 · Check Write",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "D2 · Check Write": {
+      "main": [
+        [
+          {
+            "node": "D3 · Write OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "D3 · Write OK?": {
+      "main": [
+        [
+          {
+            "node": "E1 · Form Ending",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [],
+        [
+          {
+            "node": "X · Stop With Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pipedesign.local/schemas/asset-analysis.schema.json",
+  "title": "AssetAnalysis",
+  "description": "Análise visual de uma foto de produto ou campanha para recuperação semântica e composição.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "asset_type",
+    "subjects",
+    "products",
+    "dominant_colors",
+    "background",
+    "shot_type",
+    "composition",
+    "style_keywords",
+    "suitable_for"
+  ],
+  "properties": {
+    "asset_type": {
+      "type": "string",
+      "enum": ["product", "campaign", "lifestyle", "detail", "other"]
+    },
+    "subjects": {
+      "type": "array",
+      "items": { "type": "string" },
+      "maxItems": 12
+    },
+    "products": {
+      "type": "array",
+      "items": { "type": "string" },
+      "maxItems": 12
+    },
+    "dominant_colors": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "maxItems": 8
+    },
+    "background": { "type": "string" },
+    "shot_type": {
+      "type": "string",
+      "enum": ["full_body", "three_quarter", "half_body", "close_up", "product_only", "detail", "other"]
+    },
+    "composition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subject_position", "negative_space"],
+      "properties": {
+        "subject_position": {
+          "type": "string",
+          "enum": ["left", "center", "right", "full_frame", "none"]
+        },
+        "negative_space": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["left", "right", "top", "bottom"],
+          "properties": {
+            "left": { "$ref": "#/$defs/spaceLevel" },
+            "right": { "$ref": "#/$defs/spaceLevel" },
+            "top": { "$ref": "#/$defs/spaceLevel" },
+            "bottom": { "$ref": "#/$defs/spaceLevel" }
+          }
+        }
+      }
+    },
+    "style_keywords": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "maxItems": 12
+    },
+    "suitable_for": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["carousel_cover", "carousel_photo", "product_closeup", "reel_cover", "story", "background"]
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "spaceLevel": {
+      "type": "string",
+      "enum": ["none", "low", "medium", "high"]
+    }
+  }
+}

@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pipedesign.local/schemas/job-brief.schema.json",
+  "title": "JobBrief",
+  "description": "Briefing criativo estruturado pelo WF-04. Um job = um carrossel. Não dispara Autofill/Canva.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "job_id",
+    "brand_id",
+    "content_type",
+    "slides",
+    "channel",
+    "objective",
+    "visual_direction",
+    "status",
+    "created_at"
+  ],
+  "properties": {
+    "job_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "brand_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$",
+      "description": "Slug da marca (ex.: exemplo). Não é o UUID da tabela brands."
+    },
+    "content_type": {
+      "type": "string",
+      "enum": ["carousel"]
+    },
+    "slides": {
+      "type": "integer",
+      "minimum": 2,
+      "maximum": 10
+    },
+    "channel": {
+      "type": "string",
+      "enum": ["instagram_feed"]
+    },
+    "objective": {
+      "type": "string",
+      "enum": [
+        "collection_launch",
+        "product_highlight",
+        "brand_manifesto",
+        "campaign_promo",
+        "educational"
+      ]
+    },
+    "visual_direction": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": ["editorial", "photo_dominant", "low_text", "product_closeup"]
+      }
+    },
+    "campaign": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "title": { "type": "string", "minLength": 1 },
+        "concept": { "type": "string", "minLength": 1 },
+        "key_message": { "type": "string", "minLength": 1 },
+        "cta": { "type": "string", "minLength": 1 },
+        "copy_status": {
+          "type": "string",
+          "enum": ["approved_locked", "review_keep_meaning", "draft_expandable"]
+        }
+      }
+    },
+    "references": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "format": "uri" }
+    },
+    "product": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "sku": { "type": "string", "minLength": 1 },
+        "color": { "type": "string", "minLength": 1 },
+        "url": { "type": "string", "format": "uri" }
+      }
+    },
+    "slide_copy": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["slide", "copy"],
+        "properties": {
+          "slide": { "type": "integer", "minimum": 1, "maximum": 10 },
+          "copy": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "production": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "subject_continuity": {
+          "type": "string",
+          "enum": ["not_applicable", "same_person_all_slides", "may_vary"]
+        },
+        "asset_requirements": { "type": "string", "minLength": 1 },
+        "fallback_if_missing_assets": {
+          "type": "string",
+          "enum": ["stop_and_request_assets", "approved_alternatives_only"]
+        }
+      }
+    },
+    "asset_constraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "avoid_subject_position": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": ["center", "left", "right"]
+          }
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "status": {
+      "type": "string",
+      "const": "READY_FOR_PLANNING"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

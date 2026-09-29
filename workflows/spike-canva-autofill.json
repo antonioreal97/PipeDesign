@@ -1,0 +1,1517 @@
+{
+  "name": "SPIKE - Canva Autofill E2E",
+  "nodes": [
+    {
+      "id": "0178e479-9f2a-4860-a1de-9e6555310851",
+      "name": "A1 · Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "676eb139-7862-4cc7-a9cd-ee22d4f7d62e",
+      "name": "A2 · Spike Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// A2 · Spike Config\n// Valores vêm do .env (via docker-compose). Para testar algo pontual\n// sem reiniciar o n8n, preencha OVERRIDES abaixo.\nconst OVERRIDES = {\n  // mode: 'import',                 // 'full' | 'upload_only' | 'import'\n  // template_id: '',                // Brand Template ID fixo (pula a busca por nome)\n  // template_name: '',\n  // image_path: '/workspace/spike/test-image.jpg',\n  // headline: '',\n  // subheadline: '',\n  // design_title: '',\n  // extra_autofill_fields: { NON_EXISTENT_FIELD: { type: 'text', text: 'x' } }, // teste negativo §40\n};\n\nconst env = (key, fallback = '') => {\n  const value = $env[key];\n  return value === undefined || value === null || String(value).trim() === '' ? fallback : String(value).trim();\n};\n\nconst pad = (n) => String(n).padStart(2, '0');\nconst now = new Date();\nconst stamp = now.getUTCFullYear() + pad(now.getUTCMonth() + 1) + pad(now.getUTCDate());\n\nconst apiBase = env('CANVA_API_BASE_URL', 'https://api.canva.com/rest/v1').replace(/\\/+$/, '');\nconst authInternal = env('CANVA_AUTH_INTERNAL_URL', 'http://canva-auth:3001').replace(/\\/+$/, '');\nconst authPublic = env('CANVA_AUTH_PUBLIC_URL', 'http://127.0.0.1:3001').replace(/\\/+$/, '');\n\nconst cfg = {\n  run_id: 'spike_' + stamp + '_' + $execution.id,\n  started_at: now.toISOString(),\n  mode: env('SPIKE_MODE', 'full').toLowerCase(),\n  api_base: apiBase,\n  auth_token_url: authInternal + '/auth/canva/token',\n  authorize_url: authPublic + '/auth/canva/start',\n  template_name: env('CANVA_TEST_TEMPLATE_NAME', 'SPIKE - Social Post Template'),\n  template_id: env('CANVA_TEST_BRAND_TEMPLATE_ID', ''),\n  image_path: env('SPIKE_IMAGE_PATH', '/workspace/spike/test-image.jpg'),\n  // Modo import: todos os PDF/PPTX desta pasta viram designs editáveis via POST /imports.\n  import_glob: env('SPIKE_IMPORT_GLOB', '/workspace/spike/import-test/*.{pdf,pptx}'),\n  headline: env('SPIKE_HEADLINE', 'Winter 26'),\n  subheadline: env('SPIKE_SUBHEADLINE', 'New Collection'),\n  design_title: env('SPIKE_DESIGN_TITLE', 'SPIKE - Canva Autofill'),\n  poll: {\n    interval_seconds: Number(env('SPIKE_POLL_INTERVAL_SECONDS', '2')),\n    max_attempts: Number(env('SPIKE_POLL_MAX_ATTEMPTS', '30')),\n  },\n  // Contrato esperado do template de teste (§10.2).\n  required_fields: { COVER_IMAGE: 'image', HEADLINE: 'text', SUBHEADLINE: 'text' },\n  extra_autofill_fields: {},\n  ...OVERRIDES,\n};\n\ncfg.template_lookup = cfg.template_id\n  ? { by: 'id', url: cfg.api_base + '/brand-templates/' + encodeURIComponent(cfg.template_id) }\n  : { by: 'name', url: cfg.api_base + '/brand-templates?limit=100&query=' + encodeURIComponent(cfg.template_name) };\n\nreturn [{ json: cfg }];\n"
+      }
+    },
+    {
+      "id": "92dffe41-4c30-4b52-abe6-ee8e7b1cfec2",
+      "name": "B1 · Get Canva Token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        480,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('A2 · Spike Config').first().json.auth_token_url }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.CANVA_AUTH_API_KEY || '' }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "8b73bc15-d6d9-4371-a7d3-10c2150ae3e5",
+      "name": "B2 · Check Token",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// ---------------------------------------------------------------\n// Helpers comuns do spike (repetidos em cada Code node de propósito:\n// o n8n não compartilha código entre nodes).\n// Rotas usadas pelos Switch: 0 = seguir, 1 = repetir/alternativa,\n// 2 = falhar, 3 = concluir (modo upload_only).\n// ---------------------------------------------------------------\nconst ROUTE = { NEXT: 0, RETRY: 1, FAIL: 2, DONE: 3 };\nconst cfg = $('A2 · Spike Config').first().json;\n\nfunction fail(stage, code, message, opts = {}) {\n  return [{\n    json: {\n      route: ROUTE.FAIL,\n      step: stage,\n      ok: false,\n      error: {\n        status: 'failed',\n        run_id: cfg.run_id,\n        stage,\n        code,\n        message,\n        retryable: Boolean(opts.retryable),\n        context: opts.context || {},\n      },\n    },\n  }];\n}\n\nfunction parseBody(res) {\n  let body = res && res.body;\n  if (typeof body === 'string') {\n    try { body = JSON.parse(body); } catch (e) { /* mantém texto */ }\n  }\n  return body;\n}\n\nfunction isNetworkError(res) {\n  return !res || (res.statusCode === undefined && res.error !== undefined);\n}\n\n// Classifica uma resposta HTTP de erro no modelo padronizado (§32/§33 do spike).\nfunction httpFail(stage, res, notFoundCode, context = {}) {\n  if (isNetworkError(res)) {\n    const msg = typeof res?.error === 'string' ? res.error : (res?.error?.message || 'sem resposta');\n    return fail(stage, 'CANVA_NETWORK_ERROR', 'Falha de rede ao chamar o Canva: ' + msg, { retryable: true, context });\n  }\n  const body = parseBody(res) || {};\n  const status = res.statusCode;\n  const ctx = { ...context, http_status: status, canva_error_code: body.code, canva_error_message: body.message };\n  if (status === 401) {\n    return fail(stage, 'CANVA_UNAUTHORIZED',\n      'O Canva recusou o access token. Execute o workflow de novo (o canva-auth renova o token); se persistir, autorize em ' + cfg.authorize_url,\n      { context: ctx });\n  }\n  if (status === 403) {\n    return fail(stage, 'CANVA_PERMISSION_OR_PLAN_ERROR',\n      'Sem permissão: scope ausente, recurso de outra conta ou recurso indisponível no plano Canva. ' + (body.message || ''),\n      { context: ctx });\n  }\n  if (status === 404) {\n    return fail(stage, notFoundCode || 'CANVA_NOT_FOUND', body.message || 'Recurso não encontrado no Canva.', { context: ctx });\n  }\n  if (status === 429) {\n    return fail(stage, 'CANVA_RATE_LIMITED', 'Limite de requisições do Canva atingido. Aguarde e execute novamente.', { retryable: true, context: ctx });\n  }\n  if (status >= 500) {\n    return fail(stage, 'CANVA_SERVER_ERROR', 'Erro no servidor do Canva (HTTP ' + status + ').', { retryable: true, context: ctx });\n  }\n  return fail(stage, 'CANVA_API_ERROR', body.message || ('Canva respondeu HTTP ' + status + '.'), { context: ctx });\n}\n\nfunction ok(route, step, data) {\n  return [{ json: { route, step, ok: true, ...data } }];\n}\n// ---------------------------------------------------------------\n\n// B2 · Check Token — valida a resposta do canva-auth e escolhe o modo.\nconst res = $input.first().json;\n\nconst MODE_ROUTE = { full: ROUTE.NEXT, upload_only: ROUTE.RETRY, import: ROUTE.DONE };\nif (!(cfg.mode in MODE_ROUTE)) {\n  return fail('config', 'CONFIG_INVALID', 'SPIKE_MODE inválido: \"' + cfg.mode + '\". Use \"full\", \"upload_only\" ou \"import\".');\n}\n\nif (isNetworkError(res)) {\n  return fail('oauth', 'CANVA_AUTH_UNREACHABLE',\n    'Não foi possível falar com o canva-auth em ' + cfg.auth_token_url + '. O container está de pé?',\n    { retryable: true });\n}\n\nconst body = parseBody(res) || {};\n\nif (res.statusCode === 200 && body.status === 'ok' && body.access_token) {\n  return ok(MODE_ROUTE[cfg.mode], 'token', {\n    mode: cfg.mode,\n    token_expires_at: body.expires_at,\n    token_refreshed: Boolean(body.refreshed),\n  });\n}\n\nif (body.status === 'authorization_required') {\n  return fail('oauth', body.code || 'AUTHORIZATION_REQUIRED', body.message || ('Autorize primeiro: ' + cfg.authorize_url),\n    { context: { authorize_url: body.authorize_url || cfg.authorize_url } });\n}\n\nif (body.status === 'failed') {\n  return fail(body.stage || 'token_refresh', body.code || 'CANVA_TOKEN_ERROR', body.message || 'Falha no canva-auth.',\n    { retryable: body.retryable, context: { http_status: res.statusCode, ...(body.context || {}) } });\n}\n\nreturn fail('oauth', 'CANVA_AUTH_UNEXPECTED_RESPONSE', 'Resposta inesperada do canva-auth (HTTP ' + res.statusCode + ').',\n  { context: { http_status: res.statusCode } });\n"
+      }
+    },
+    {
+      "id": "457bf84d-2d6c-447e-afd5-84b05c164ea0",
+      "name": "B3 · Modo?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        960,
+        300
+      ],
+      "parameters": {
+        "mode": "expression",
+        "numberOutputs": 4,
+        "output": "={{ $json.route }}",
+        "looseTypeValidation": false
+      }
+    },
+    {
+      "id": "ed15ce5c-609b-4f59-a593-711e4d9c4c02",
+      "name": "C1 · Find Brand Template",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1200,
+        120
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('A2 · Spike Config').first().json.template_lookup.url }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $('B1 · Get Canva Token').first().json.body.access_token }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "e2341371-50a4-43a7-a834-76706daf8e5e",
+      "name": "C2 · Select Brand Template",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        120
+      ],
+      "parameters": {
+        "jsCode": "// ---------------------------------------------------------------\n// Helpers comuns do spike (repetidos em cada Code node de propósito:\n// o n8n não compartilha código entre nodes).\n// Rotas usadas pelos Switch: 0 = seguir, 1 = repetir/alternativa,\n// 2 = falhar, 3 = concluir (modo upload_only).\n// ---------------------------------------------------------------\nconst ROUTE = { NEXT: 0, RETRY: 1, FAIL: 2, DONE: 3 };\nconst cfg = $('A2 · Spike Config').first().json;\n\nfunction fail(stage, code, message, opts = {}) {\n  return [{\n    json: {\n      route: ROUTE.FAIL,\n      step: stage,\n      ok: false,\n      error: {\n        status: 'failed',\n        run_id: cfg.run_id,\n        stage,\n        code,\n        message,\n        retryable: Boolean(opts.retryable),\n        context: opts.context || {},\n      },\n    },\n  }];\n}\n\nfunction parseBody(res) {\n  let body = res && res.body;\n  if (typeof body === 'string') {\n    try { body = JSON.parse(body); } catch (e) { /* mantém texto */ }\n  }\n  return body;\n}\n\nfunction isNetworkError(res) {\n  return !res || (res.statusCode === undefined && res.error !== undefined);\n}\n\n// Classifica uma resposta HTTP de erro no modelo padronizado (§32/§33 do spike).\nfunction httpFail(stage, res, notFoundCode, context = {}) {\n  if (isNetworkError(res)) {\n    const msg = typeof res?.error === 'string' ? res.error : (res?.error?.message || 'sem resposta');\n    return fail(stage, 'CANVA_NETWORK_ERROR', 'Falha de rede ao chamar o Canva: ' + msg, { retryable: true, context });\n  }\n  const body = parseBody(res) || {};\n  const status = res.statusCode;\n  const ctx = { ...context, http_status: status, canva_error_code: body.code, canva_error_message: body.message };\n  if (status === 401) {\n    return fail(stage, 'CANVA_UNAUTHORIZED',\n      'O Canva recusou o access token. Execute o workflow de novo (o canva-auth renova o token); se persistir, autorize em ' + cfg.authorize_url,\n      { context: ctx });\n  }\n  if (status === 403) {\n    return fail(stage, 'CANVA_PERMISSION_OR_PLAN_ERROR',\n      'Sem permissão: scope ausente, recurso de outra conta ou recurso indisponível no plano Canva. ' + (body.message || ''),\n      { context: ctx });\n  }\n  if (status === 404) {\n    return fail(stage, notFoundCode || 'CANVA_NOT_FOUND', body.message || 'Recurso não encontrado no Canva.', { context: ctx });\n  }\n  if (status === 429) {\n    return fail(stage, 'CANVA_RATE_LIMITED', 'Limite de requisições do Canva atingido. Aguarde e execute novamente.', { retryable: true, context: ctx });\n  }\n  if (status >= 500) {\n    return fail(stage, 'CANVA_SERVER_ERROR', 'Erro no servidor do Canva (HTTP ' + status + ').', { retryable: true, context: ctx });\n  }\n  return fail(stage, 'CANVA_API_ERROR', body.message || ('Canva respondeu HTTP ' + status + '.'), { context: ctx });\n}\n\nfunction ok(route, step, data) {\n  return [{ json: { route, step, ok: true, ...data } }];\n}\n// ---------------------------------------------------------------\n\n// C2 · Select Brand Template\nconst res = $input.first().json;\nconst lookup = cfg.template_lookup;\n\nif (isNetworkError(res) || res.statusCode !== 200) {\n  return httpFail('brand_template_lookup', res, 'BRAND_TEMPLATE_NOT_FOUND', { lookup_by: lookup.by, template_id: cfg.template_id || undefined });\n}\nconst body = parseBody(res) || {};\n\nif (lookup.by === 'id') {\n  const tpl = body.brand_template;\n  if (!tpl || !tpl.id) {\n    return fail('brand_template_lookup', 'BRAND_TEMPLATE_NOT_FOUND', 'Resposta sem brand_template para o ID ' + cfg.template_id + '.');\n  }\n  return ok(ROUTE.NEXT, 'brand_template_lookup', { lookup_by: 'id', brand_template_id: tpl.id, template_name: tpl.title });\n}\n\nconst normalize = (s) => String(s || '').trim().toLowerCase();\nconst items = Array.isArray(body.items) ? body.items : [];\nconst matches = items.filter((t) => normalize(t.title) === normalize(cfg.template_name));\n\nif (matches.length === 0) {\n  return fail('brand_template_lookup', 'BRAND_TEMPLATE_NOT_FOUND',\n    'Nenhum Brand Template com o título \"' + cfg.template_name + '\". Publique o template (§10) ou defina CANVA_TEST_BRAND_TEMPLATE_ID.',\n    { context: { templates_returned: items.map((t) => ({ id: t.id, title: t.title })), more_pages: Boolean(body.continuation) } });\n}\nif (matches.length > 1) {\n  return fail('brand_template_lookup', 'BRAND_TEMPLATE_AMBIGUOUS',\n    'Há ' + matches.length + ' Brand Templates com o título \"' + cfg.template_name + '\". Defina CANVA_TEST_BRAND_TEMPLATE_ID.',\n    { context: { candidates: matches.map((t) => ({ id: t.id, title: t.title, updated_at: t.updated_at })) } });\n}\n\nconst tpl = matches[0];\nreturn ok(ROUTE.NEXT, 'brand_template_lookup', {\n  lookup_by: 'name',\n  brand_template_id: tpl.id,\n  template_name: tpl.title,\n  hint: 'Listagem OK. Para as próximas execuções, grave CANVA_TEST_BRAND_TEMPLATE_ID=' + tpl.id + ' no .env.',\n});\n"
+      }
+    },
+    {
+      "id": "e27205fd-c51c-4d97-a4de-6f09ba35b798",
+      "name": "C3 · Template OK?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1680,
+        120
+      ],
+      "parameters": {
+        "mode": "expression",
+        "numberOutputs": 3,
+        "output": "={{ $json.route }}",
+        "looseTypeValidation": false
+      }
+    },
+    {
+      "id": "4d45f2c5-7dba-48bf-a723-3930981c6a1f",
+      "name": "D1 · Get Template Dataset",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1920,
+        120
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('A2 · Spike Config').first().json.api_base }}/brand-templates/{{ encodeURIComponent($json.brand_template_id) }}/dataset",
+        "authentication": "none",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $('B1 · Get Canva Token').first().json.body.access_token }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "cc95efd0-a60d-4f2d-aa8f-f90e174be754",
+      "name": "D2 · Validate Dataset",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        120
+      ],
+      "parameters": {
+        "jsCode": "// ---------------------------------------------------------------\n// Helpers comuns do spike (repetidos em cada Code node de propósito:\n// o n8n não compartilha código entre nodes).\n// Rotas usadas pelos Switch: 0 = seguir, 1 = repetir/alternativa,\n// 2 = falhar, 3 = concluir (modo upload_only).\n// ---------------------------------------------------------------\nconst ROUTE = { NEXT: 0, RETRY: 1, FAIL: 2, DONE: 3 };\nconst cfg = $('A2 · Spike Config').first().json;\n\nfunction fail(stage, code, message, opts = {}) {\n  return [{\n    json: {\n      route: ROUTE.FAIL,\n      step: stage,\n      ok: false,\n      error: {\n        status: 'failed',\n        run_id: cfg.run_id,\n        stage,\n        code,\n        message,\n        retryable: Boolean(opts.retryable),\n        context: opts.context || {},\n      },\n    },\n  }];\n}\n\nfunction parseBody(res) {\n  let body = res && res.body;\n  if (typeof body === 'string') {\n    try { body = JSON.parse(body); } catch (e) { /* mantém texto */ }\n  }\n  return body;\n}\n\nfunction isNetworkError(res) {\n  return !res || (res.statusCode === undefined && res.error !== undefined);\n}\n\n// Classifica uma resposta HTTP de erro no modelo padronizado (§32/§33 do spike).\nfunction httpFail(stage, res, notFoundCode, context = {}) {\n  if (isNetworkError(res)) {\n    const msg = typeof res?.error === 'string' ? res.error : (res?.error?.message || 'sem resposta');\n    return fail(stage, 'CANVA_NETWORK_ERROR', 'Falha de rede ao chamar o Canva: ' + msg, { retryable: true, context });\n  }\n  const body = parseBody(res) || {};\n  const status = res.statusCode;\n  const ctx = { ...context, http_status: status, canva_error_code: body.code, canva_error_message: body.message };\n  if (status === 401) {\n    return fail(stage, 'CANVA_UNAUTHORIZED',\n      'O Canva recusou o access token. Execute o workflow de novo (o canva-auth renova o token); se persistir, autorize em ' + cfg.authorize_url,\n      { context: ctx });\n  }\n  if (status === 403) {\n    return fail(stage, 'CANVA_PERMISSION_OR_PLAN_ERROR',\n      'Sem permissão: scope ausente, recurso de outra conta ou recurso indisponível no plano Canva. ' + (body.message || ''),\n      { context: ctx });\n  }\n  if (status === 404) {\n    return fail(stage, notFoundCode || 'CANVA_NOT_FOUND', body.message || 'Recurso não encontrado no Canva.', { context: ctx });\n  }\n  if (status === 429) {\n    return fail(stage, 'CANVA_RATE_LIMITED', 'Limite de requisições do Canva atingido. Aguarde e execute novamente.', { retryable: true, context: ctx });\n  }\n  if (status >= 500) {\n    return fail(stage, 'CANVA_SERVER_ERROR', 'Erro no servidor do Canva (HTTP ' + status + ').', { retryable: true, context: ctx });\n  }\n  return fail(stage, 'CANVA_API_ERROR', body.message || ('Canva respondeu HTTP ' + status + '.'), { context: ctx });\n}\n\nfunction ok(route, step, data) {\n  return [{ json: { route, step, ok: true, ...data } }];\n}\n// ---------------------------------------------------------------\n\n// D2 · Validate Dataset — fail fast antes de qualquer upload (§20).\nconst res = $input.first().json;\nconst tpl = $('C2 · Select Brand Template').first().json;\n\nif (isNetworkError(res) || res.statusCode !== 200) {\n  return httpFail('template_dataset', res, 'BRAND_TEMPLATE_NOT_FOUND', { brand_template_id: tpl.brand_template_id });\n}\n\nconst dataset = (parseBody(res) || {}).dataset || {};\nconst received = Object.fromEntries(Object.entries(dataset).map(([name, def]) => [name, def && def.type]));\nconst expected = cfg.required_fields;\n\nconst missing = Object.keys(expected).filter((name) => !(name in received));\nconst wrongType = Object.keys(expected)\n  .filter((name) => name in received && received[name] !== expected[name])\n  .map((name) => ({ field: name, expected: expected[name], received: received[name] }));\n\nif (missing.length || wrongType.length) {\n  return fail('template_dataset_validation', 'TEMPLATE_SCHEMA_MISMATCH',\n    'O dataset do Brand Template não bate com o esperado.' +\n      (missing.length ? ' Faltando: ' + missing.join(', ') + '.' : '') +\n      (wrongType.length ? ' Tipo errado: ' + wrongType.map((w) => w.field).join(', ') + '.' : ''),\n    { context: { brand_template_id: tpl.brand_template_id, missing_fields: missing, wrong_type: wrongType, expected, received } });\n}\n\nreturn ok(ROUTE.NEXT, 'template_dataset', {\n  brand_template_id: tpl.brand_template_id,\n  template_name: tpl.template_name,\n  fields: Object.keys(received),\n  dataset: received,\n});\n"
+      }
+    },
+    {
+      "id": "01bbf562-f69f-4c41-a2a2-f6824f64984f",
+      "name": "D3 · Dataset OK?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        2400,
+        120
+      ],
+      "parameters": {
+        "mode": "expression",
+        "numberOutputs": 3,
+        "output": "={{ $json.route }}",
+        "looseTypeValidation": false
+      }
+    },
+    {
+      "id": "0cb961bf-4c23-4993-a2f9-118ab81a31b2",
+      "name": "E1 · Read Local Image",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        2640,
+        300
+      ],
+      "parameters": {
+        "operation": "read",
+        "fileSelector": "={{ $('A2 · Spike Config').first().json.image_path }}",
+        "options": {
+          "dataPropertyName": "data"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "aaac95c9-2cb0-4b17-ad67-e43d63107ef4",
+      "name": "E2 · Validate Local Image",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// ---------------------------------------------------------------\n// Helpers comuns do spike (repetidos em cada Code node de propósito:\n// o n8n não compartilha código entre nodes).\n// Rotas usadas pelos Switch: 0 = seguir, 1 = repetir/alternativa,\n// 2 = falhar, 3 = concluir (modo upload_only).\n// ---------------------------------------------------------------\nconst ROUTE = { NEXT: 0, RETRY: 1, FAIL: 2, DONE: 3 };\nconst cfg = $('A2 · Spike Config').first().json;\n\nfunction fail(stage, code, message, opts = {}) {\n  return [{\n    json: {\n      route: ROUTE.FAIL,\n      step: stage,\n      ok: false,\n      error: {\n        status: 'failed',\n        run_id: cfg.run_id,\n        stage,\n        code,\n        message,\n        retryable: Boolean(opts.retryable),\n        context: opts.context || {},\n      },\n    },\n  }];\n}\n\nfunction parseBody(res) {\n  let body = res && res.body;\n  if (typeof body === 'string') {\n    try { body = JSON.parse(body); } catch (e) { /* mantém texto */ }\n  }\n  return body;\n}\n\nfunction isNetworkError(res) {\n  return !res || (res.statusCode === undefined && res.error !== undefined);\n}\n\n// Classifica uma resposta HTTP de erro no modelo padronizado (§32/§33 do spike).\nfunction httpFail(stage, res, notFoundCode, context = {}) {\n  if (isNetworkError(res)) {\n    const msg = typeof res?.error === 'string' ? res.error : (res?.error?.message || 'sem resposta');\n    return fail(stage, 'CANVA_NETWORK_ERROR', 'Falha de rede ao chamar o Canva: ' + msg, { retryable: true, context });\n  }\n  const body = parseBody(res) || {};\n  const status = res.statusCode;\n  const ctx = { ...context, http_status: status, canva_error_code: body.code, canva_error_message: body.message };\n  if (status === 401) {\n    return fail(stage, 'CANVA_UNAUTHORIZED',\n      'O Canva recusou o access token. Execute o workflow de novo (o canva-auth renova o token); se persistir, autorize em ' + cfg.authorize_url,\n      { context: ctx });\n  }\n  if (status === 403) {\n    return fail(stage, 'CANVA_PERMISSION_OR_PLAN_ERROR',\n      'Sem permissão: scope ausente, recurso de outra conta ou recurso indisponível no plano Canva. ' + (body.message || ''),\n      { context: ctx });\n  }\n  if (status === 404) {\n    return fail(stage, notFoundCode || 'CANVA_NOT_FOUND', body.message || 'Recurso não encontrado no Canva.', { context: ctx });\n  }\n  if (status === 429) {\n    return fail(stage, 'CANVA_RATE_LIMITED', 'Limite de requisições do Canva atingido. Aguarde e execute novamente.', { retryable: true, context: ctx });\n  }\n  if (status >= 500) {\n    return fail(stage, 'CANVA_SERVER_ERROR', 'Erro no servidor do Canva (HTTP ' + status + ').', { retryable: true, context: ctx });\n  }\n  return fail(stage, 'CANVA_API_ERROR', body.message || ('Canva respondeu HTTP ' + status + '.'), { context: ctx });\n}\n\nfunction ok(route, step, data) {\n  return [{ json: { route, step, ok: true, ...data } }];\n}\n// ---------------------------------------------------------------\n\n// E2 · Validate Local Image (§21)\nconst items = $input.all();\nconst MAX_BYTES = 50 * 1024 * 1024;\nconst ALLOWED = ['image/jpeg', 'image/png', 'image/heic', 'image/heif', 'image/tiff', 'image/gif', 'image/webp'];\n\nconst errored = items.find((i) => i.json && i.json.error);\nif (errored) {\n  const e = errored.json.error;\n  const detail = typeof e === 'string' ? e : (e.message || JSON.stringify(e));\n  if (/no file\\(s\\) found/i.test(detail)) {\n    return fail('read_local_asset', 'LOCAL_ASSET_NOT_FOUND',\n      'Arquivo não encontrado: ' + cfg.image_path + ' (o caminho é dentro do container; ./workspace do projeto = /workspace).',\n      { context: { local_path: cfg.image_path } });\n  }\n  return fail('read_local_asset', 'LOCAL_ASSET_READ_FAILED',\n    'Não foi possível ler ' + cfg.image_path + ': ' + (typeof e === 'string' ? e : (e.message || JSON.stringify(e))),\n    { context: { local_path: cfg.image_path } });\n}\n\nconst files = items.filter((i) => i.binary && i.binary.data);\nif (files.length === 0) {\n  return fail('read_local_asset', 'LOCAL_ASSET_NOT_FOUND',\n    'Arquivo não encontrado: ' + cfg.image_path + ' (o caminho é dentro do container; ./workspace do projeto = /workspace).',\n    { context: { local_path: cfg.image_path } });\n}\nif (files.length > 1) {\n  return fail('read_local_asset', 'LOCAL_ASSET_AMBIGUOUS',\n    'O caminho casou com ' + files.length + ' arquivos; o spike envia exatamente uma imagem.',\n    { context: { local_path: cfg.image_path, matched: files.map((f) => f.binary.data.fileName) } });\n}\n\nconst bin = files[0].binary.data;\nconst mime = String(bin.mimeType || '').toLowerCase();\nif (!ALLOWED.includes(mime)) {\n  return fail('read_local_asset', 'LOCAL_ASSET_UNSUPPORTED_TYPE',\n    'Tipo de arquivo não suportado para upload: ' + (mime || 'desconhecido') + '. Use JPEG ou PNG no spike.',\n    { context: { local_path: cfg.image_path, mime_type: mime } });\n}\n\nlet bytes = typeof bin.bytes === 'number' ? bin.bytes : undefined;\nif (bytes === undefined && typeof bin.data === 'string' && !bin.id) {\n  bytes = Math.floor(bin.data.length * 3 / 4);\n}\nif (bytes !== undefined && bytes > MAX_BYTES) {\n  return fail('read_local_asset', 'LOCAL_ASSET_TOO_LARGE', 'Arquivo com ' + bytes + ' bytes; o limite é 50 MB.',\n    { context: { local_path: cfg.image_path, bytes } });\n}\n\n// Nome do asset no Canva: até 50 caracteres, enviado em Base64 no header Asset-Upload-Metadata.\nconst baseName = String(bin.fileName || 'spike-asset').replace(/\\.[^.]+$/, '');\nconst assetName = ('spike-' + baseName).slice(0, 50);\nconst nameBase64 = Buffer.from(assetName, 'utf8').toString('base64');\n\nreturn [{\n  json: {\n    route: ROUTE.NEXT,\n    step: 'read_local_asset',\n    ok: true,\n    local_path: cfg.image_path,\n    file_name: bin.fileName,\n    mime_type: mime,\n    bytes: bytes ?? null,\n    asset_name: assetName,\n    upload_metadata: JSON.stringify({ name_base64: nameBase64 }),\n  },\n  binary: { data: bin },\n}];\n"
+      }
+    },
+    {
+      "id": "d7032c3a-0f30-49a6-a278-d9be658d768b",
+      "name": "E3 · Imagem OK?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        3120,
+        300
+      ],
+      "parameters": {
+        "mode": "expression",
+        "numberOutputs": 3,
+        "output": "={{ $json.route }}",
+        "looseTypeValidation": false
+      }
+    },
+    {
+      "id": "536e5218-8c51-4505-a03a-2ef764db7f2a",
+      "name": "F1 · Create Asset Upload Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        3360,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('A2 · Spike Config').first().json.api_base }}/asset-uploads",
+        "authentication": "none",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $('B1 · Get Canva Token').first().json.body.access_token }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/octet-stream"
+            },
+            {
+              "name": "Asset-Upload-Metadata",
+              "value": "={{ $json.upload_metadata }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "64a3ded0-77e3-4375-a2a1-a544679602a8",
+      "name": "F2 · Check Upload Job",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3600,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// ---------------------------------------------------------------\n// Helpers comuns do spike (repetidos em cada Code node de propósito:\n// o n8n não compartilha código entre nodes).\n// Rotas usadas pelos Switch: 0 = seguir, 1 = repetir/alternativa,\n// 2 = falhar, 3 = concluir (modo upload_only).\n// ---------------------------------------------------------------\nconst ROUTE = { NEXT: 0, RETRY: 1, FAIL: 2, DONE: 3 };\nconst cfg = $('A2 · Spike Config').first().json;\n\nfunction fail(stage, code, message, opts = {}) {\n  return [{\n    json: {\n      route: ROUTE.FAIL,\n      step: stage,\n      ok: false,\n      error: {\n        status: 'failed',\n        run_id: cfg.run_id,\n        stage,\n        code,\n        message,\n        retryable: Boolean(opts.retryable),\n        context: opts.context || {},\n      },\n    },\n  }];\n}\n\nfunction parseBody(res) {\n  let body = res && res.body;\n  if (typeof body === 'string') {\n    try { body = JSON.parse(body); } catch (e) { /* mantém texto */ }\n  }\n  return body;\n}\n\nfunction isNetworkError(res) {\n  return !res || (res.statusCode === undefined && res.error !== undefined);\n}\n\n// Classifica uma resposta HTTP de erro no modelo padronizado (§32/§33 do spike).\nfunction httpFail(stage, res, notFoundCode, context = {}) {\n  if (isNetworkError(res)) {\n    const msg = typeof res?.error === 'string' ? res.error : (res?.error?.message || 'sem resposta');\n    return fail(stage, 'CANVA_NETWORK_ERROR', 'Falha de rede ao chamar o Canva: ' + msg, { retryable: true, context });\n  }\n  const body = parseBody(res) || {};\n  const status = res.statusCode;\n  const ctx = { ...context, http_status: status, canva_error_code: body.code, canva_error_message: body.message };\n  if (status === 401) {\n    return fail(stage, 'CANVA_UNAUTHORIZED',\n      'O Canva recusou o access token. Execute o workflow de novo (o canva-auth renova o token); se persistir, autorize em ' + cfg.authorize_url,\n      { context: ctx });\n  }\n  if (status === 403) {\n    return fail(stage, 'CANVA_PERMISSION_OR_PLAN_ERROR',\n      'Sem permissão: scope ausente, recurso de outra conta ou recurso indisponível no plano Canva. ' + (body.message || ''),\n      { context: ctx });\n  }\n  if (status === 404) {\n    return fail(stage, notFoundCode || 'CANVA_NOT_FOUND', body.message || 'Recurso não encontrado no Canva.', { context: ctx });\n  }\n  if (status === 429) {\n    return fail(stage, 'CANVA_RATE_LIMITED', 'Limite de requisições do Canva atingido. Aguarde e execute novamente.', { retryable: true, context: ctx });\n  }\n  if (status >= 500) {\n    return fail(stage, 'CANVA_SERVER_ERROR', 'Erro no servidor do Canva (HTTP ' + status + ').', { retryable: true, context: ctx });\n  }\n  return fail(stage, 'CANVA_API_ERROR', body.message || ('Canva respondeu HTTP ' + status + '.'), { context: ctx });\n}\n\nfunction ok(route, step, data) {\n  return [{ json: { route, step, ok: true, ...data } }];\n}\n// ---------------------------------------------------------------\n\n// F2 · Check Upload Job (§22–§23)\nconst res = $input.first().json;\nconst attempt = $runIndex; // 0 = resposta do POST; 1..N = polling\nconst stage = attempt === 0 ? 'asset_upload' : 'asset_upload_polling';\nconst previous = attempt > 0 ? $('G0 · Wait Upload').first().json : null;\nconst image = $('E2 · Validate Local Image').first().json;\nconst knownJobId = previous ? previous.upload_job_id : undefined;\n\nconst retry = (jobId, reason) => {\n  if (attempt >= cfg.poll.max_attempts) {\n    return fail('asset_upload_polling', 'CANVA_ASSET_UPLOAD_TIMEOUT',\n      'Upload não terminou após ' + attempt + ' consultas (' + cfg.poll.interval_seconds + 's cada).',\n      { retryable: true, context: { job_id: jobId, last_reason: reason } });\n  }\n  return [{ json: { route: ROUTE.RETRY, step: stage, ok: true, upload_job_id: jobId, attempt, waiting_for: reason } }];\n};\n\nif (knownJobId && (isNetworkError(res) || res.statusCode === 429 || res.statusCode >= 500)) {\n  return retry(knownJobId, isNetworkError(res) ? 'network_error' : 'http_' + res.statusCode);\n}\nif (isNetworkError(res) || res.statusCode < 200 || res.statusCode >= 300) {\n  return httpFail(stage, res, 'CANVA_ASSET_UPLOAD_JOB_NOT_FOUND', { job_id: knownJobId });\n}\n\nconst job = (parseBody(res) || {}).job || {};\nif (!job.id) {\n  return fail(stage, 'CANVA_UNEXPECTED_RESPONSE', 'Resposta do upload sem job.id.', { context: { http_status: res.statusCode } });\n}\n\nif (job.status === 'success') {\n  const asset = job.asset || {};\n  if (!asset.id) {\n    return fail(stage, 'CANVA_UNEXPECTED_RESPONSE', 'Upload concluído sem job.asset.id.', { context: { job_id: job.id } });\n  }\n  return ok(cfg.mode === 'full' ? ROUTE.NEXT : ROUTE.DONE, 'asset_upload', {\n    upload_job_id: job.id,\n    canva_asset_id: asset.id,\n    canva_asset_name: asset.name,\n    local_path: image.local_path,\n    attempts: attempt,\n  });\n}\n\nif (job.status === 'failed') {\n  const e = job.error || {};\n  return fail(stage, 'CANVA_ASSET_UPLOAD_FAILED', 'O Canva recusou o upload: ' + (e.message || e.code || 'sem detalhes'),\n    { context: { job_id: job.id, canva_error_code: e.code } });\n}\n\nreturn retry(job.id, job.status || 'unknown_status');\n"
+      }
+    },
+    {
+      "id": "bafc468c-f9a3-4750-a288-f58def5d76f5",
+      "name": "F3 · Upload pronto?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        3840,
+        300
+      ],
+      "parameters": {
+        "mode": "expression",
+        "numberOutputs": 4,
+        "output": "={{ $json.route }}",
+        "looseTypeValidation": false
+      }
+    },
+    {
+      "id": "4fb29e3b-9242-4124-a63b-6b3860089d6b",
+      "name": "G0 · Wait Upload",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        3840,
+        480
+      ],
+      "webhookId": "54d6d526-8281-4cf5-a6eb-061a27caeaa8",
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": "={{ $('A2 · Spike Config').first().json.poll.interval_seconds }}",
+        "unit": "seconds"
+      }
+    },
+    {
+      "id": "f7e587bd-a8e3-429e-a5d0-ccd41875d70f",
+      "name": "G1 · Get Upload Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        3600,
+        480
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('A2 · Spike Config').first().json.api_base }}/asset-uploads/{{ encodeURIComponent($json.upload_job_id) }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $('B1 · Get Canva Token').first().json.body.access_token }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "386e8e09-95fa-4094-a411-c8bc635a64c4",
+      "name": "F9 · Resultado (upload_only)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4080,
+        660
+      ],
+      "parameters": {
+        "jsCode": "// ---------------------------------------------------------------\n// Helpers comuns do spike (repetidos em cada Code node de propósito:\n// o n8n não compartilha código entre nodes).\n// Rotas usadas pelos Switch: 0 = seguir, 1 = repetir/alternativa,\n// 2 = falhar, 3 = concluir (modo upload_only).\n// ---------------------------------------------------------------\nconst ROUTE = { NEXT: 0, RETRY: 1, FAIL: 2, DONE: 3 };\nconst cfg = $('A2 · Spike Config').first().json;\n\nfunction fail(stage, code, message, opts = {}) {\n  return [{\n    json: {\n      route: ROUTE.FAIL,\n      step: stage,\n      ok: false,\n      error: {\n        status: 'failed',\n        run_id: cfg.run_id,\n        stage,\n        code,\n        message,\n        retryable: Boolean(opts.retryable),\n        context: opts.context || {},\n      },\n    },\n  }];\n}\n\nfunction parseBody(res) {\n  let body = res && res.body;\n  if (typeof body === 'string') {\n    try { body = JSON.parse(body); } catch (e) { /* mantém texto */ }\n  }\n  return body;\n}\n\nfunction isNetworkError(res) {\n  return !res || (res.statusCode === undefined && res.error !== undefined);\n}\n\n// Classifica uma resposta HTTP de erro no modelo padronizado (§32/§33 do spike).\nfunction httpFail(stage, res, notFoundCode, context = {}) {\n  if (isNetworkError(res)) {\n    const msg = typeof res?.error === 'string' ? res.error : (res?.error?.message || 'sem resposta');\n    return fail(stage, 'CANVA_NETWORK_ERROR', 'Falha de rede ao chamar o Canva: ' + msg, { retryable: true, context });\n  }\n  const body = parseBody(res) || {};\n  const status = res.statusCode;\n  const ctx = { ...context, http_status: status, canva_error_code: body.code, canva_error_message: body.message };\n  if (status === 401) {\n    return fail(stage, 'CANVA_UNAUTHORIZED',\n      'O Canva recusou o access token. Execute o workflow de novo (o canva-auth renova o token); se persistir, autorize em ' + cfg.authorize_url,\n      { context: ctx });\n  }\n  if (status === 403) {\n    return fail(stage, 'CANVA_PERMISSION_OR_PLAN_ERROR',\n      'Sem permissão: scope ausente, recurso de outra conta ou recurso indisponível no plano Canva. ' + (body.message || ''),\n      { context: ctx });\n  }\n  if (status === 404) {\n    return fail(stage, notFoundCode || 'CANVA_NOT_FOUND', body.message || 'Recurso não encontrado no Canva.', { context: ctx });\n  }\n  if (status === 429) {\n    return fail(stage, 'CANVA_RATE_LIMITED', 'Limite de requisições do Canva atingido. Aguarde e execute novamente.', { retryable: true, context: ctx });\n  }\n  if (status >= 500) {\n    return fail(stage, 'CANVA_SERVER_ERROR', 'Erro no servidor do Canva (HTTP ' + status + ').', { retryable: true, context: ctx });\n  }\n  return fail(stage, 'CANVA_API_ERROR', body.message || ('Canva respondeu HTTP ' + status + '.'), { context: ctx });\n}\n\nfunction ok(route, step, data) {\n  return [{ json: { route, step, ok: true, ...data } }];\n}\n// ---------------------------------------------------------------\n\n// F9 · Resultado (upload_only)\nconst up = $input.first().json;\nreturn [{\n  json: {\n    status: 'success',\n    mode: 'upload_only',\n    run_id: cfg.run_id,\n    started_at: cfg.started_at,\n    finished_at: new Date().toISOString(),\n    asset: {\n      local_path: up.local_path,\n      canva_asset_id: up.canva_asset_id,\n      name: up.canva_asset_name,\n    },\n    upload: { job_id: up.upload_job_id, polling_attempts: up.attempts },\n    next_step: 'Publique o Brand Template de teste e rode com SPIKE_MODE=full.',\n  },\n}];\n"
+      }
+    },
+    {
+      "id": "c80bcd38-8b67-4b55-a045-df5007318793",
+      "name": "H1 · Build Autofill Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4080,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// ---------------------------------------------------------------\n// Helpers comuns do spike (repetidos em cada Code node de propósito:\n// o n8n não compartilha código entre nodes).\n// Rotas usadas pelos Switch: 0 = seguir, 1 = repetir/alternativa,\n// 2 = falhar, 3 = concluir (modo upload_only).\n// ---------------------------------------------------------------\nconst ROUTE = { NEXT: 0, RETRY: 1, FAIL: 2, DONE: 3 };\nconst cfg = $('A2 · Spike Config').first().json;\n\nfunction fail(stage, code, message, opts = {}) {\n  return [{\n    json: {\n      route: ROUTE.FAIL,\n      step: stage,\n      ok: false,\n      error: {\n        status: 'failed',\n        run_id: cfg.run_id,\n        stage,\n        code,\n        message,\n        retryable: Boolean(opts.retryable),\n        context: opts.context || {},\n      },\n    },\n  }];\n}\n\nfunction parseBody(res) {\n  let body = res && res.body;\n  if (typeof body === 'string') {\n    try { body = JSON.parse(body); } catch (e) { /* mantém texto */ }\n  }\n  return body;\n}\n\nfunction isNetworkError(res) {\n  return !res || (res.statusCode === undefined && res.error !== undefined);\n}\n\n// Classifica uma resposta HTTP de erro no modelo padronizado (§32/§33 do spike).\nfunction httpFail(stage, res, notFoundCode, context = {}) {\n  if (isNetworkError(res)) {\n    const msg = typeof res?.error === 'string' ? res.error : (res?.error?.message || 'sem resposta');\n    return fail(stage, 'CANVA_NETWORK_ERROR', 'Falha de rede ao chamar o Canva: ' + msg, { retryable: true, context });\n  }\n  const body = parseBody(res) || {};\n  const status = res.statusCode;\n  const ctx = { ...context, http_status: status, canva_error_code: body.code, canva_error_message: body.message };\n  if (status === 401) {\n    return fail(stage, 'CANVA_UNAUTHORIZED',\n      'O Canva recusou o access token. Execute o workflow de novo (o canva-auth renova o token); se persistir, autorize em ' + cfg.authorize_url,\n      { context: ctx });\n  }\n  if (status === 403) {\n    return fail(stage, 'CANVA_PERMISSION_OR_PLAN_ERROR',\n      'Sem permissão: scope ausente, recurso de outra conta ou recurso indisponível no plano Canva. ' + (body.message || ''),\n      { context: ctx });\n  }\n  if (status === 404) {\n    return fail(stage, notFoundCode || 'CANVA_NOT_FOUND', body.message || 'Recurso não encontrado no Canva.', { context: ctx });\n  }\n  if (status === 429) {\n    return fail(stage, 'CANVA_RATE_LIMITED', 'Limite de requisições do Canva atingido. Aguarde e execute novamente.', { retryable: true, context: ctx });\n  }\n  if (status >= 500) {\n    return fail(stage, 'CANVA_SERVER_ERROR', 'Erro no servidor do Canva (HTTP ' + status + ').', { retryable: true, context: ctx });\n  }\n  return fail(stage, 'CANVA_API_ERROR', body.message || ('Canva respondeu HTTP ' + status + '.'), { context: ctx });\n}\n\nfunction ok(route, step, data) {\n  return [{ json: { route, step, ok: true, ...data } }];\n}\n// ---------------------------------------------------------------\n\n// H1 · Build Autofill Request (§24) — objeto intermediário validado antes do POST.\nconst up = $input.first().json;\nconst tpl = $('D2 · Validate Dataset').first().json;\n\nconst data = {\n  COVER_IMAGE: { type: 'image', asset_id: up.canva_asset_id },\n  HEADLINE: { type: 'text', text: cfg.headline },\n  SUBHEADLINE: { type: 'text', text: cfg.subheadline },\n  ...(cfg.extra_autofill_fields || {}),\n};\n\nconst autofillRequest = {\n  type: 'create_from_brand_template',\n  brand_template_id: tpl.brand_template_id,\n  title: cfg.design_title,\n  data,\n};\n\n// Validação contra o dataset real do template.\nconst problems = [];\nif (!autofillRequest.title || autofillRequest.title.length > 255) problems.push({ field: 'title', problem: 'deve ter entre 1 e 255 caracteres' });\nfor (const [name, value] of Object.entries(data)) {\n  const expectedType = tpl.dataset[name];\n  if (!expectedType) { problems.push({ field: name, problem: 'não existe no dataset do template' }); continue; }\n  if (!value || value.type !== expectedType) { problems.push({ field: name, problem: 'tipo ' + (value && value.type) + ' != ' + expectedType }); continue; }\n  if (value.type === 'text' && !String(value.text || '').trim()) problems.push({ field: name, problem: 'texto vazio' });\n  if (value.type === 'image' && !String(value.asset_id || '').trim()) problems.push({ field: name, problem: 'asset_id vazio' });\n}\n\nif (problems.length) {\n  return fail('autofill_request_validation', 'AUTOFILL_REQUEST_INVALID',\n    'AutofillRequest inválido: ' + problems.map((p) => p.field + ' (' + p.problem + ')').join('; '),\n    { context: { problems, dataset_fields: tpl.fields } });\n}\n\nconst unfilled = tpl.fields.filter((f) => !(f in data));\nreturn ok(ROUTE.NEXT, 'autofill_request_validation', {\n  autofill_request: autofillRequest,\n  unfilled_template_fields: unfilled,\n  canva_asset_id: up.canva_asset_id,\n  upload_job_id: up.upload_job_id,\n});\n"
+      }
+    },
+    {
+      "id": "341fcadd-cf35-4ab4-a822-8a548580a075",
+      "name": "H2 · Request OK?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        4320,
+        300
+      ],
+      "parameters": {
+        "mode": "expression",
+        "numberOutputs": 3,
+        "output": "={{ $json.route }}",
+        "looseTypeValidation": false
+      }
+    },
+    {
+      "id": "b5cfeb0f-e53b-4917-adb1-69e261c788ea",
+      "name": "I1 · Create Autofill Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        4560,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('A2 · Spike Config').first().json.api_base }}/autofills",
+        "authentication": "none",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $('B1 · Get Canva Token').first().json.body.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.autofill_request) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "ea742171-068a-454a-acc2-3126632c2603",
+      "name": "J1 · Check Autofill Job",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4800,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// ---------------------------------------------------------------\n// Helpers comuns do spike (repetidos em cada Code node de propósito:\n// o n8n não compartilha código entre nodes).\n// Rotas usadas pelos Switch: 0 = seguir, 1 = repetir/alternativa,\n// 2 = falhar, 3 = concluir (modo upload_only).\n// ---------------------------------------------------------------\nconst ROUTE = { NEXT: 0, RETRY: 1, FAIL: 2, DONE: 3 };\nconst cfg = $('A2 · Spike Config').first().json;\n\nfunction fail(stage, code, message, opts = {}) {\n  return [{\n    json: {\n      route: ROUTE.FAIL,\n      step: stage,\n      ok: false,\n      error: {\n        status: 'failed',\n        run_id: cfg.run_id,\n        stage,\n        code,\n        message,\n        retryable: Boolean(opts.retryable),\n        context: opts.context || {},\n      },\n    },\n  }];\n}\n\nfunction parseBody(res) {\n  let body = res && res.body;\n  if (typeof body === 'string') {\n    try { body = JSON.parse(body); } catch (e) { /* mantém texto */ }\n  }\n  return body;\n}\n\nfunction isNetworkError(res) {\n  return !res || (res.statusCode === undefined && res.error !== undefined);\n}\n\n// Classifica uma resposta HTTP de erro no modelo padronizado (§32/§33 do spike).\nfunction httpFail(stage, res, notFoundCode, context = {}) {\n  if (isNetworkError(res)) {\n    const msg = typeof res?.error === 'string' ? res.error : (res?.error?.message || 'sem resposta');\n    return fail(stage, 'CANVA_NETWORK_ERROR', 'Falha de rede ao chamar o Canva: ' + msg, { retryable: true, context });\n  }\n  const body = parseBody(res) || {};\n  const status = res.statusCode;\n  const ctx = { ...context, http_status: status, canva_error_code: body.code, canva_error_message: body.message };\n  if (status === 401) {\n    return fail(stage, 'CANVA_UNAUTHORIZED',\n      'O Canva recusou o access token. Execute o workflow de novo (o canva-auth renova o token); se persistir, autorize em ' + cfg.authorize_url,\n      { context: ctx });\n  }\n  if (status === 403) {\n    return fail(stage, 'CANVA_PERMISSION_OR_PLAN_ERROR',\n      'Sem permissão: scope ausente, recurso de outra conta ou recurso indisponível no plano Canva. ' + (body.message || ''),\n      { context: ctx });\n  }\n  if (status === 404) {\n    return fail(stage, notFoundCode || 'CANVA_NOT_FOUND', body.message || 'Recurso não encontrado no Canva.', { context: ctx });\n  }\n  if (status === 429) {\n    return fail(stage, 'CANVA_RATE_LIMITED', 'Limite de requisições do Canva atingido. Aguarde e execute novamente.', { retryable: true, context: ctx });\n  }\n  if (status >= 500) {\n    return fail(stage, 'CANVA_SERVER_ERROR', 'Erro no servidor do Canva (HTTP ' + status + ').', { retryable: true, context: ctx });\n  }\n  return fail(stage, 'CANVA_API_ERROR', body.message || ('Canva respondeu HTTP ' + status + '.'), { context: ctx });\n}\n\nfunction ok(route, step, data) {\n  return [{ json: { route, step, ok: true, ...data } }];\n}\n// ---------------------------------------------------------------\n\n// J1 · Check Autofill Job (§25–§26)\nconst res = $input.first().json;\nconst attempt = $runIndex; // 0 = resposta do POST; 1..N = polling\nconst stage = attempt === 0 ? 'autofill_create' : 'autofill_polling';\nconst previous = attempt > 0 ? $('J0 · Wait Autofill').first().json : null;\nconst knownJobId = previous ? previous.autofill_job_id : undefined;\n\nconst retry = (jobId, reason) => {\n  if (attempt >= cfg.poll.max_attempts) {\n    return fail('autofill_polling', 'CANVA_AUTOFILL_TIMEOUT',\n      'Autofill não terminou após ' + attempt + ' consultas (' + cfg.poll.interval_seconds + 's cada).',\n      { retryable: true, context: { job_id: jobId, last_reason: reason } });\n  }\n  return [{ json: { route: ROUTE.RETRY, step: stage, ok: true, autofill_job_id: jobId, attempt, waiting_for: reason } }];\n};\n\nif (knownJobId && (isNetworkError(res) || res.statusCode === 429 || res.statusCode >= 500)) {\n  return retry(knownJobId, isNetworkError(res) ? 'network_error' : 'http_' + res.statusCode);\n}\nif (isNetworkError(res) || res.statusCode < 200 || res.statusCode >= 300) {\n  const out = httpFail(stage, res, 'CANVA_AUTOFILL_JOB_NOT_FOUND', { job_id: knownJobId });\n  if (res && res.statusCode === 403) {\n    out[0].json.error.context.autofill_capability = 'BLOCKED_BY_PLAN';\n    out[0].json.error.message = 'Autofill indisponível para esta conta/integração (exige Canva Enterprise ou acesso de desenvolvimento). ' +\n      (out[0].json.error.context.canva_error_message || '');\n  }\n  return out;\n}\n\nconst job = (parseBody(res) || {}).job || {};\nif (!job.id) {\n  return fail(stage, 'CANVA_UNEXPECTED_RESPONSE', 'Resposta do Autofill sem job.id.', { context: { http_status: res.statusCode } });\n}\n\nif (job.status === 'success') {\n  const design = (job.result && job.result.design) || {};\n  if (!design.id) {\n    return fail(stage, 'CANVA_UNEXPECTED_RESPONSE', 'Autofill concluído sem result.design.id.', { context: { job_id: job.id } });\n  }\n  return ok(ROUTE.NEXT, 'autofill', {\n    autofill_job_id: job.id,\n    design_id: design.id,\n    attempts: attempt,\n  });\n}\n\nif (job.status === 'failed') {\n  const e = job.error || {};\n  return fail(stage, 'CANVA_AUTOFILL_FAILED', 'O Canva não conseguiu criar o design: ' + (e.message || e.code || 'sem detalhes'),\n    { context: { job_id: job.id, canva_error_code: e.code } });\n}\n\nreturn retry(job.id, job.status || 'unknown_status');\n"
+      }
+    },
+    {
+      "id": "15b635f4-54a3-4a48-a55b-e45ff170d99b",
+      "name": "J2 · Autofill pronto?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        5040,
+        300
+      ],
+      "parameters": {
+        "mode": "expression",
+        "numberOutputs": 3,
+        "output": "={{ $json.route }}",
+        "looseTypeValidation": false
+      }
+    },
+    {
+      "id": "e4de43f4-56c0-44c2-a6fc-044fc75a23e8",
+      "name": "J0 · Wait Autofill",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        5040,
+        480
+      ],
+      "webhookId": "e4484f8b-e19f-43d5-a010-1d3a0ec2a586",
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": "={{ $('A2 · Spike Config').first().json.poll.interval_seconds }}",
+        "unit": "seconds"
+      }
+    },
+    {
+      "id": "446d8588-4c04-41cd-ab1b-29ec2c56e59a",
+      "name": "J3 · Get Autofill Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        4800,
+        480
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('A2 · Spike Config').first().json.api_base }}/autofills/{{ encodeURIComponent($json.autofill_job_id) }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $('B1 · Get Canva Token').first().json.body.access_token }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "86046d59-95c8-4ae3-ae6d-7baff7151cd5",
+      "name": "K1 · Get Design",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        5280,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('A2 · Spike Config').first().json.api_base }}/designs/{{ encodeURIComponent($json.design_id) }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $('B1 · Get Canva Token').first().json.body.access_token }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "5af7ef3a-06d0-4871-ab05-150faa4b7c2a",
+      "name": "K2 · Check Design",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5520,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// ---------------------------------------------------------------\n// Helpers comuns do spike (repetidos em cada Code node de propósito:\n// o n8n não compartilha código entre nodes).\n// Rotas usadas pelos Switch: 0 = seguir, 1 = repetir/alternativa,\n// 2 = falhar, 3 = concluir (modo upload_only).\n// ---------------------------------------------------------------\nconst ROUTE = { NEXT: 0, RETRY: 1, FAIL: 2, DONE: 3 };\nconst cfg = $('A2 · Spike Config').first().json;\n\nfunction fail(stage, code, message, opts = {}) {\n  return [{\n    json: {\n      route: ROUTE.FAIL,\n      step: stage,\n      ok: false,\n      error: {\n        status: 'failed',\n        run_id: cfg.run_id,\n        stage,\n        code,\n        message,\n        retryable: Boolean(opts.retryable),\n        context: opts.context || {},\n      },\n    },\n  }];\n}\n\nfunction parseBody(res) {\n  let body = res && res.body;\n  if (typeof body === 'string') {\n    try { body = JSON.parse(body); } catch (e) { /* mantém texto */ }\n  }\n  return body;\n}\n\nfunction isNetworkError(res) {\n  return !res || (res.statusCode === undefined && res.error !== undefined);\n}\n\n// Classifica uma resposta HTTP de erro no modelo padronizado (§32/§33 do spike).\nfunction httpFail(stage, res, notFoundCode, context = {}) {\n  if (isNetworkError(res)) {\n    const msg = typeof res?.error === 'string' ? res.error : (res?.error?.message || 'sem resposta');\n    return fail(stage, 'CANVA_NETWORK_ERROR', 'Falha de rede ao chamar o Canva: ' + msg, { retryable: true, context });\n  }\n  const body = parseBody(res) || {};\n  const status = res.statusCode;\n  const ctx = { ...context, http_status: status, canva_error_code: body.code, canva_error_message: body.message };\n  if (status === 401) {\n    return fail(stage, 'CANVA_UNAUTHORIZED',\n      'O Canva recusou o access token. Execute o workflow de novo (o canva-auth renova o token); se persistir, autorize em ' + cfg.authorize_url,\n      { context: ctx });\n  }\n  if (status === 403) {\n    return fail(stage, 'CANVA_PERMISSION_OR_PLAN_ERROR',\n      'Sem permissão: scope ausente, recurso de outra conta ou recurso indisponível no plano Canva. ' + (body.message || ''),\n      { context: ctx });\n  }\n  if (status === 404) {\n    return fail(stage, notFoundCode || 'CANVA_NOT_FOUND', body.message || 'Recurso não encontrado no Canva.', { context: ctx });\n  }\n  if (status === 429) {\n    return fail(stage, 'CANVA_RATE_LIMITED', 'Limite de requisições do Canva atingido. Aguarde e execute novamente.', { retryable: true, context: ctx });\n  }\n  if (status >= 500) {\n    return fail(stage, 'CANVA_SERVER_ERROR', 'Erro no servidor do Canva (HTTP ' + status + ').', { retryable: true, context: ctx });\n  }\n  return fail(stage, 'CANVA_API_ERROR', body.message || ('Canva respondeu HTTP ' + status + '.'), { context: ctx });\n}\n\nfunction ok(route, step, data) {\n  return [{ json: { route, step, ok: true, ...data } }];\n}\n// ---------------------------------------------------------------\n\n// K2 · Check Design + monta o resultado final (§27–§28)\nconst res = $input.first().json;\nconst af = $('J1 · Check Autofill Job').last().json;\nconst req = $('H1 · Build Autofill Request').first().json;\nconst tpl = $('D2 · Validate Dataset').first().json;\nconst img = $('E2 · Validate Local Image').first().json;\n\nif (isNetworkError(res) || res.statusCode !== 200) {\n  return httpFail('design_lookup', res, 'DESIGN_NOT_FOUND', { design_id: af.design_id });\n}\nconst design = (parseBody(res) || {}).design || {};\nconst urls = design.urls || {};\n\nreturn ok(ROUTE.NEXT, 'design_lookup', {\n  result: {\n    status: 'success',\n    mode: 'full',\n    run_id: cfg.run_id,\n    started_at: cfg.started_at,\n    finished_at: new Date().toISOString(),\n    autofill_capability: 'AVAILABLE_OR_DEVELOPMENT_TRIAL',\n    source: { brand_template_id: tpl.brand_template_id, template_name: tpl.template_name, fields: tpl.fields },\n    asset: { local_path: img.local_path, canva_asset_id: req.canva_asset_id, upload_job_id: req.upload_job_id },\n    autofill: { job_id: af.autofill_job_id, polling_attempts: af.attempts, unfilled_template_fields: req.unfilled_template_fields },\n    design: {\n      id: design.id || af.design_id,\n      title: design.title,\n      page_count: design.page_count,\n      // URLs temporárias: o identificador permanente é design.id (§27).\n      edit_url: urls.edit_url,\n      view_url: urls.view_url,\n    },\n  },\n});\n"
+      }
+    },
+    {
+      "id": "46abe86b-d9d9-479c-ad9e-545aaddc602c",
+      "name": "K3 · Design OK?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        5760,
+        300
+      ],
+      "parameters": {
+        "mode": "expression",
+        "numberOutputs": 3,
+        "output": "={{ $json.route }}",
+        "looseTypeValidation": false
+      }
+    },
+    {
+      "id": "0106a02e-a285-4276-a344-eb79954f3f72",
+      "name": "K9 · Resultado Final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6000,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// K9 · Resultado Final — abra design.edit_url para validar no Canva (§39, teste 7).\nreturn [{ json: $input.first().json.result }];\n"
+      }
+    },
+    {
+      "id": "4ff70592-a307-4598-a39f-7a9a4e275758",
+      "name": "M1 · Read Import Files",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        1200,
+        840
+      ],
+      "parameters": {
+        "operation": "read",
+        "fileSelector": "={{ $('A2 · Spike Config').first().json.import_glob }}",
+        "options": {
+          "dataPropertyName": "data",
+          "literalBrackets": true
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "2c42d522-5e87-41df-ab69-040d25a0e896",
+      "name": "M2 · Prepare Import Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        840
+      ],
+      "parameters": {
+        "jsCode": "// ---------------------------------------------------------------\n// Helpers comuns do spike (repetidos em cada Code node de propósito:\n// o n8n não compartilha código entre nodes).\n// Rotas usadas pelos Switch: 0 = seguir, 1 = repetir/alternativa,\n// 2 = falhar, 3 = concluir (modo upload_only).\n// ---------------------------------------------------------------\nconst ROUTE = { NEXT: 0, RETRY: 1, FAIL: 2, DONE: 3 };\nconst cfg = $('A2 · Spike Config').first().json;\n\nfunction fail(stage, code, message, opts = {}) {\n  return [{\n    json: {\n      route: ROUTE.FAIL,\n      step: stage,\n      ok: false,\n      error: {\n        status: 'failed',\n        run_id: cfg.run_id,\n        stage,\n        code,\n        message,\n        retryable: Boolean(opts.retryable),\n        context: opts.context || {},\n      },\n    },\n  }];\n}\n\nfunction parseBody(res) {\n  let body = res && res.body;\n  if (typeof body === 'string') {\n    try { body = JSON.parse(body); } catch (e) { /* mantém texto */ }\n  }\n  return body;\n}\n\nfunction isNetworkError(res) {\n  return !res || (res.statusCode === undefined && res.error !== undefined);\n}\n\n// Classifica uma resposta HTTP de erro no modelo padronizado (§32/§33 do spike).\nfunction httpFail(stage, res, notFoundCode, context = {}) {\n  if (isNetworkError(res)) {\n    const msg = typeof res?.error === 'string' ? res.error : (res?.error?.message || 'sem resposta');\n    return fail(stage, 'CANVA_NETWORK_ERROR', 'Falha de rede ao chamar o Canva: ' + msg, { retryable: true, context });\n  }\n  const body = parseBody(res) || {};\n  const status = res.statusCode;\n  const ctx = { ...context, http_status: status, canva_error_code: body.code, canva_error_message: body.message };\n  if (status === 401) {\n    return fail(stage, 'CANVA_UNAUTHORIZED',\n      'O Canva recusou o access token. Execute o workflow de novo (o canva-auth renova o token); se persistir, autorize em ' + cfg.authorize_url,\n      { context: ctx });\n  }\n  if (status === 403) {\n    return fail(stage, 'CANVA_PERMISSION_OR_PLAN_ERROR',\n      'Sem permissão: scope ausente, recurso de outra conta ou recurso indisponível no plano Canva. ' + (body.message || ''),\n      { context: ctx });\n  }\n  if (status === 404) {\n    return fail(stage, notFoundCode || 'CANVA_NOT_FOUND', body.message || 'Recurso não encontrado no Canva.', { context: ctx });\n  }\n  if (status === 429) {\n    return fail(stage, 'CANVA_RATE_LIMITED', 'Limite de requisições do Canva atingido. Aguarde e execute novamente.', { retryable: true, context: ctx });\n  }\n  if (status >= 500) {\n    return fail(stage, 'CANVA_SERVER_ERROR', 'Erro no servidor do Canva (HTTP ' + status + ').', { retryable: true, context: ctx });\n  }\n  return fail(stage, 'CANVA_API_ERROR', body.message || ('Canva respondeu HTTP ' + status + '.'), { context: ctx });\n}\n\nfunction ok(route, step, data) {\n  return [{ json: { route, step, ok: true, ...data } }];\n}\n// ---------------------------------------------------------------\n\n// M2 · Prepare Import Files — um item por arquivo, com Import-Metadata (§ design imports)\nconst MIME = {\n  pdf: 'application/pdf',\n  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',\n  ppt: 'application/vnd.ms-powerpoint',\n  ai: 'application/illustrator',\n  psd: 'image/vnd.adobe.photoshop',\n  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',\n  key: 'application/vnd.apple.keynote',\n};\nconst MAX_BYTES = 300 * 1024 * 1024;\nconst items = $input.all();\n\nconst errored = items.find((i) => i.json && i.json.error);\nconst files = items.filter((i) => i.binary && i.binary.data);\nif (files.length === 0) {\n  const detail = errored ? (typeof errored.json.error === 'string' ? errored.json.error : (errored.json.error.message || '')) : '';\n  return fail('read_import_files', 'IMPORT_FILES_NOT_FOUND',\n    'Nenhum arquivo para importar em ' + cfg.import_glob + (detail ? ' (' + detail + ')' : '') + '.',\n    { context: { import_glob: cfg.import_glob } });\n}\nif (files.length > 10) {\n  return fail('read_import_files', 'IMPORT_TOO_MANY_FILES', 'Encontrados ' + files.length + ' arquivos; o teste aceita no máximo 10 (limite de 20 imports/min do Canva).',\n    { context: { import_glob: cfg.import_glob } });\n}\n\nconst out = [];\nconst skipped = [];\nfor (const item of files) {\n  const bin = item.binary.data;\n  const fileName = bin.fileName || 'arquivo';\n  const ext = String(bin.fileExtension || fileName.split('.').pop() || '').toLowerCase();\n  const mime = MIME[ext];\n  const bytes = typeof bin.bytes === 'number' ? bin.bytes : null;\n  if (!mime) { skipped.push({ file_name: fileName, reason: 'extensão não suportada: ' + ext }); continue; }\n  if (bytes !== null && bytes > MAX_BYTES) { skipped.push({ file_name: fileName, reason: 'maior que 300 MB' }); continue; }\n  // Título do design no Canva: até 50 caracteres (antes do Base64).\n  const title = ('IMPORT TESTE - ' + fileName.replace(/\\.[^.]+$/, '')).slice(0, 50);\n  out.push({\n    json: {\n      route: ROUTE.NEXT,\n      step: 'read_import_files',\n      ok: true,\n      file_name: fileName,\n      mime_type: mime,\n      bytes,\n      title,\n      import_metadata: JSON.stringify({ title_base64: Buffer.from(title, 'utf8').toString('base64'), mime_type: mime }),\n      skipped,\n    },\n    // O HTTP Request envia o Content-Type do binário; forçamos octet-stream como a API pede.\n    binary: { data: { ...bin, mimeType: 'application/octet-stream' } },\n  });\n}\nif (out.length === 0) {\n  return fail('read_import_files', 'IMPORT_FILES_UNSUPPORTED', 'Nenhum arquivo com formato suportado.', { context: { skipped } });\n}\nreturn out;\n"
+      }
+    },
+    {
+      "id": "5af9c25b-f836-493a-a2aa-b43ea9990754",
+      "name": "M3 · Arquivos OK?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1680,
+        840
+      ],
+      "parameters": {
+        "mode": "expression",
+        "numberOutputs": 3,
+        "output": "={{ $json.route }}",
+        "looseTypeValidation": false
+      }
+    },
+    {
+      "id": "0b902a80-1af9-4602-ae00-9a6acc76190e",
+      "name": "M4 · Create Design Import Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1920,
+        840
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('A2 · Spike Config').first().json.api_base }}/imports",
+        "authentication": "none",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $('B1 · Get Canva Token').first().json.body.access_token }}"
+            },
+            {
+              "name": "Import-Metadata",
+              "value": "={{ $json.import_metadata }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "f6da4a0a-66f9-4ac1-adb4-9b08c3e6b4db",
+      "name": "M5 · Check Import Jobs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        840
+      ],
+      "parameters": {
+        "jsCode": "// ---------------------------------------------------------------\n// Helpers comuns do spike (repetidos em cada Code node de propósito:\n// o n8n não compartilha código entre nodes).\n// Rotas usadas pelos Switch: 0 = seguir, 1 = repetir/alternativa,\n// 2 = falhar, 3 = concluir (modo upload_only).\n// ---------------------------------------------------------------\nconst ROUTE = { NEXT: 0, RETRY: 1, FAIL: 2, DONE: 3 };\nconst cfg = $('A2 · Spike Config').first().json;\n\nfunction fail(stage, code, message, opts = {}) {\n  return [{\n    json: {\n      route: ROUTE.FAIL,\n      step: stage,\n      ok: false,\n      error: {\n        status: 'failed',\n        run_id: cfg.run_id,\n        stage,\n        code,\n        message,\n        retryable: Boolean(opts.retryable),\n        context: opts.context || {},\n      },\n    },\n  }];\n}\n\nfunction parseBody(res) {\n  let body = res && res.body;\n  if (typeof body === 'string') {\n    try { body = JSON.parse(body); } catch (e) { /* mantém texto */ }\n  }\n  return body;\n}\n\nfunction isNetworkError(res) {\n  return !res || (res.statusCode === undefined && res.error !== undefined);\n}\n\n// Classifica uma resposta HTTP de erro no modelo padronizado (§32/§33 do spike).\nfunction httpFail(stage, res, notFoundCode, context = {}) {\n  if (isNetworkError(res)) {\n    const msg = typeof res?.error === 'string' ? res.error : (res?.error?.message || 'sem resposta');\n    return fail(stage, 'CANVA_NETWORK_ERROR', 'Falha de rede ao chamar o Canva: ' + msg, { retryable: true, context });\n  }\n  const body = parseBody(res) || {};\n  const status = res.statusCode;\n  const ctx = { ...context, http_status: status, canva_error_code: body.code, canva_error_message: body.message };\n  if (status === 401) {\n    return fail(stage, 'CANVA_UNAUTHORIZED',\n      'O Canva recusou o access token. Execute o workflow de novo (o canva-auth renova o token); se persistir, autorize em ' + cfg.authorize_url,\n      { context: ctx });\n  }\n  if (status === 403) {\n    return fail(stage, 'CANVA_PERMISSION_OR_PLAN_ERROR',\n      'Sem permissão: scope ausente, recurso de outra conta ou recurso indisponível no plano Canva. ' + (body.message || ''),\n      { context: ctx });\n  }\n  if (status === 404) {\n    return fail(stage, notFoundCode || 'CANVA_NOT_FOUND', body.message || 'Recurso não encontrado no Canva.', { context: ctx });\n  }\n  if (status === 429) {\n    return fail(stage, 'CANVA_RATE_LIMITED', 'Limite de requisições do Canva atingido. Aguarde e execute novamente.', { retryable: true, context: ctx });\n  }\n  if (status >= 500) {\n    return fail(stage, 'CANVA_SERVER_ERROR', 'Erro no servidor do Canva (HTTP ' + status + ').', { retryable: true, context: ctx });\n  }\n  return fail(stage, 'CANVA_API_ERROR', body.message || ('Canva respondeu HTTP ' + status + '.'), { context: ctx });\n}\n\nfunction ok(route, step, data) {\n  return [{ json: { route, step, ok: true, ...data } }];\n}\n// ---------------------------------------------------------------\n\n// M5 · Check Import Jobs\nconst responses = $input.all();\nconst attempt = $runIndex; // 0 = respostas dos POST; 1..N = polling\nconst previous = attempt === 0\n  ? $('M2 · Prepare Import Files').all().map((i) => ({ file_name: i.json.file_name, mime_type: i.json.mime_type, bytes: i.json.bytes, title: i.json.title, status: 'pending' }))\n  : $('M7 · Expand Pending Jobs').all().map((i) => i.json);\nconst skipped = attempt === 0 ? ($('M2 · Prepare Import Files').first().json.skipped || []) : $('M6 · Wait Import').first().json.skipped;\nconst carried = attempt === 0 ? [] : $('M6 · Wait Import').first().json.jobs.filter((j) => j.status === 'success' || j.status === 'failed');\n\nconst classify = (res) => {\n  if (isNetworkError(res)) return { kind: 'transient', reason: 'network_error' };\n  if (res.statusCode === 429 || res.statusCode >= 500) return { kind: 'transient', reason: 'http_' + res.statusCode };\n  if (res.statusCode < 200 || res.statusCode >= 300) return { kind: 'http_error' };\n  return { kind: 'ok' };\n};\n\nconst jobs = previous.map((prev, idx) => {\n  const res = responses[idx] ? responses[idx].json : undefined;\n  const c = classify(res);\n  if (c.kind === 'transient') {\n    // No POST, erro transitório = não criou job: marca como falha retryable.\n    if (!prev.job_id) return { ...prev, status: 'failed', error: { code: 'CANVA_IMPORT_CREATE_FAILED', message: 'Falha temporária ao criar a importação (' + c.reason + ').', retryable: true } };\n    return { ...prev, status: 'in_progress', last_reason: c.reason };\n  }\n  if (c.kind === 'http_error') {\n    const e = httpFail(attempt === 0 ? 'design_import_create' : 'design_import_polling', res, 'CANVA_IMPORT_JOB_NOT_FOUND', { file_name: prev.file_name })[0].json.error;\n    if (res.statusCode === 403) e.context.import_capability = 'BLOCKED';\n    return { ...prev, status: 'failed', error: e };\n  }\n  const job = (parseBody(res) || {}).job || {};\n  if (!job.id) return { ...prev, status: 'failed', error: { code: 'CANVA_UNEXPECTED_RESPONSE', message: 'Resposta sem job.id.' } };\n  const base = { ...prev, job_id: job.id, status: job.status || 'in_progress' };\n  if (job.status === 'success') {\n    const designs = ((job.result && job.result.designs) || []).map((d) => ({\n      id: d.id,\n      title: d.title,\n      page_count: d.page_count,\n      edit_url: d.urls && d.urls.edit_url,\n      view_url: d.urls && d.urls.view_url,\n      thumbnail: d.thumbnail ? { width: d.thumbnail.width, height: d.thumbnail.height } : undefined,\n    }));\n    return { ...base, designs };\n  }\n  if (job.status === 'failed') {\n    const e = job.error || {};\n    return { ...base, error: { code: 'CANVA_IMPORT_FAILED', message: 'O Canva não conseguiu importar: ' + (e.message || e.code || 'sem detalhes'), canva_error_code: e.code } };\n  }\n  return base;\n});\n\nconst all = [...carried, ...jobs];\nconst pending = all.filter((j) => j.status !== 'success' && j.status !== 'failed');\n\nif (pending.length && attempt < cfg.poll.max_attempts) {\n  return [{ json: { route: ROUTE.RETRY, step: 'design_import_polling', ok: true, attempt, pending: pending.length, jobs: all, skipped } }];\n}\n\n// Terminou (ou estourou o limite de tentativas).\nconst finalJobs = all.map((j) => (j.status === 'success' || j.status === 'failed')\n  ? j\n  : { ...j, status: 'failed', error: { code: 'CANVA_IMPORT_TIMEOUT', message: 'Importação não terminou após ' + attempt + ' consultas.', retryable: true } });\nconst succeeded = finalJobs.filter((j) => j.status === 'success');\n\nif (succeeded.length === 0) {\n  const blocked = finalJobs.every((j) => j.error && j.error.context && j.error.context.import_capability === 'BLOCKED');\n  return fail(blocked ? 'design_import_create' : 'design_import', blocked ? 'CANVA_PERMISSION_OR_PLAN_ERROR' : 'CANVA_IMPORT_ALL_FAILED',\n    blocked ? 'O Canva recusou a importação de designs para esta conta/integração (403).' : 'Nenhum arquivo foi importado.',\n    { context: { jobs: finalJobs, skipped } });\n}\n\nreturn [{ json: {\n  route: ROUTE.NEXT,\n  step: 'design_import',\n  ok: true,\n  result: {\n    status: succeeded.length === finalJobs.length ? 'success' : 'partial',\n    mode: 'import',\n    run_id: cfg.run_id,\n    started_at: cfg.started_at,\n    finished_at: new Date().toISOString(),\n    polling_attempts: attempt,\n    imported: succeeded.length,\n    failed: finalJobs.length - succeeded.length,\n    files: finalJobs.map((j) => ({\n      file_name: j.file_name,\n      status: j.status,\n      job_id: j.job_id,\n      designs: j.designs,\n      error: j.error,\n    })),\n    skipped,\n    next_step: 'Abra cada edit_url (válida por 30 dias) e avalie: texto em caixas editáveis, fontes, foto substituível e layout.',\n  },\n} }];\n"
+      }
+    },
+    {
+      "id": "5f0c0df7-b1fb-412d-a332-b6982c33403d",
+      "name": "M5 · Importações prontas?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        2400,
+        840
+      ],
+      "parameters": {
+        "mode": "expression",
+        "numberOutputs": 3,
+        "output": "={{ $json.route }}",
+        "looseTypeValidation": false
+      }
+    },
+    {
+      "id": "20ac8fef-0570-4353-a77a-b676909397eb",
+      "name": "M6 · Wait Import",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2400,
+        1020
+      ],
+      "webhookId": "e7846164-f473-422a-a4e6-2d01aa1fcc80",
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": "={{ $('A2 · Spike Config').first().json.poll.interval_seconds }}",
+        "unit": "seconds"
+      }
+    },
+    {
+      "id": "d2d1e403-07fc-4764-a061-7487693dbe96",
+      "name": "M7 · Expand Pending Jobs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        1020
+      ],
+      "parameters": {
+        "jsCode": "// M7 · Expand Pending Jobs — um item por job ainda em andamento\nreturn $input.first().json.jobs\n  .filter((j) => j.status !== 'success' && j.status !== 'failed')\n  .map((j) => ({ json: j }));\n"
+      }
+    },
+    {
+      "id": "56afb849-3443-4b13-afb9-44cd190dbf85",
+      "name": "M8 · Get Design Import Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1920,
+        1020
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('A2 · Spike Config').first().json.api_base }}/imports/{{ encodeURIComponent($json.job_id) }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $('B1 · Get Canva Token').first().json.body.access_token }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "a47f73e8-ad46-4585-a2da-f0fe4b8c5dec",
+      "name": "M9 · Resultado (import)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        840
+      ],
+      "parameters": {
+        "jsCode": "// K9 · Resultado Final — abra design.edit_url para validar no Canva (§39, teste 7).\nreturn [{ json: $input.first().json.result }];\n"
+      }
+    },
+    {
+      "id": "d25b4cb1-99a2-4b37-ad7c-f486669e26a4",
+      "name": "X · Stop With Error",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        3120,
+        660
+      ],
+      "parameters": {
+        "errorType": "errorObject",
+        "errorObject": "={{ JSON.stringify($json.error) }}"
+      }
+    },
+    {
+      "id": "6f5d1264-a5e3-41ef-aa5f-6642d174c597",
+      "name": "Nota · Como usar",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -180
+      ],
+      "parameters": {
+        "content": "## SPIKE - Canva Autofill E2E\nSpike técnico (docs/CANVA_INTEGRATION_SPIKE.md). Execute com **Execute Workflow**.\n\n**Antes:** autorize em http://127.0.0.1:3001/auth/canva/start\n\n**Modo** (`SPIKE_MODE` no .env ou OVERRIDES em A2):\n- `upload_only` → token → imagem → upload → asset_id\n- `full` → + template, dataset, Autofill e design (exige Autofill/Enterprise)\n- `import` → PDF/PPTX de `/workspace/spike/import-test` → designs editáveis (sem Enterprise)\n\nToda falha termina em **X · Stop With Error** com o erro padronizado (§32). O resultado fica no último node executado.",
+        "width": 700,
+        "height": 300,
+        "color": 5
+      }
+    },
+    {
+      "id": "be683582-9b8f-4466-ae5e-1726130066c1",
+      "name": "Nota · A/B",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        200,
+        0
+      ],
+      "parameters": {
+        "content": "### A–B · Config e token\nValores do .env. O token vem do canva-auth (renovado automaticamente); o client secret nunca passa pelo n8n.",
+        "width": 900,
+        "height": 340,
+        "color": 7
+      }
+    },
+    {
+      "id": "4953a890-7ef8-4449-a2cd-951da6a9c511",
+      "name": "Nota · C/D",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1160,
+        -180
+      ],
+      "parameters": {
+        "content": "### C–D · Brand Template e dataset\nBusca por `CANVA_TEST_BRAND_TEMPLATE_ID` ou pelo título. Valida COVER_IMAGE (image), HEADLINE e SUBHEADLINE (text) **antes** do upload.",
+        "width": 1450,
+        "height": 340,
+        "color": 7
+      }
+    },
+    {
+      "id": "7b0e4244-9cd2-4af5-a389-71e3eef7ae87",
+      "name": "Nota · E",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2600,
+        0
+      ],
+      "parameters": {
+        "content": "### E · Imagem local\nLê `SPIKE_IMAGE_PATH` (dentro do container: ./workspace = /workspace). Aceita JPEG/PNG/HEIC/TIFF/GIF/WEBP até 50 MB.",
+        "width": 680,
+        "height": 340,
+        "color": 7
+      }
+    },
+    {
+      "id": "c61bfeb1-b7c5-49c7-a29b-389ca140e222",
+      "name": "Nota · F/G",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3320,
+        0
+      ],
+      "parameters": {
+        "content": "### F–G · Upload assíncrono\nPOST /asset-uploads e polling a cada 2 s (máx. 30). 429/5xx/rede durante o polling = nova tentativa.",
+        "width": 920,
+        "height": 700,
+        "color": 7
+      }
+    },
+    {
+      "id": "bedd6f99-4bfe-4eef-ad22-0a619a0e7f1a",
+      "name": "Nota · H–K",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        4040,
+        0
+      ],
+      "parameters": {
+        "content": "### H–K · Autofill e design\nAutofillRequest validado contra o dataset real → POST /autofills → polling → GET /designs/{id}. 403 no Autofill = BLOCKED_BY_PLAN (exige Enterprise ou acesso de dev).",
+        "width": 2150,
+        "height": 700,
+        "color": 7
+      }
+    },
+    {
+      "id": "817059e1-93df-44db-a132-30c1b41e5a90",
+      "name": "Nota · M",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1160,
+        540
+      ],
+      "parameters": {
+        "content": "### M · Importar PDF/PPTX (modo import)\nLê os arquivos de `SPIKE_IMPORT_GLOB`, cria um job `POST /imports` por arquivo e acompanha todos juntos (`GET /imports/{id}`). O resultado lista o `edit_url` de cada design. Não depende de Autofill.",
+        "width": 1700,
+        "height": 520,
+        "color": 4
+      }
+    }
+  ],
+  "connections": {
+    "A1 · Start": {
+      "main": [
+        [
+          {
+            "node": "A2 · Spike Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A2 · Spike Config": {
+      "main": [
+        [
+          {
+            "node": "B1 · Get Canva Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "B1 · Get Canva Token": {
+      "main": [
+        [
+          {
+            "node": "B2 · Check Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "B2 · Check Token": {
+      "main": [
+        [
+          {
+            "node": "B3 · Modo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "B3 · Modo?": {
+      "main": [
+        [
+          {
+            "node": "C1 · Find Brand Template",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "E1 · Read Local Image",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "X · Stop With Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "M1 · Read Import Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M1 · Read Import Files": {
+      "main": [
+        [
+          {
+            "node": "M2 · Prepare Import Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M2 · Prepare Import Files": {
+      "main": [
+        [
+          {
+            "node": "M3 · Arquivos OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M3 · Arquivos OK?": {
+      "main": [
+        [
+          {
+            "node": "M4 · Create Design Import Job",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [],
+        [
+          {
+            "node": "X · Stop With Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M4 · Create Design Import Job": {
+      "main": [
+        [
+          {
+            "node": "M5 · Check Import Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M5 · Check Import Jobs": {
+      "main": [
+        [
+          {
+            "node": "M5 · Importações prontas?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M5 · Importações prontas?": {
+      "main": [
+        [
+          {
+            "node": "M9 · Resultado (import)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "M6 · Wait Import",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "X · Stop With Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M6 · Wait Import": {
+      "main": [
+        [
+          {
+            "node": "M7 · Expand Pending Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M7 · Expand Pending Jobs": {
+      "main": [
+        [
+          {
+            "node": "M8 · Get Design Import Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M8 · Get Design Import Job": {
+      "main": [
+        [
+          {
+            "node": "M5 · Check Import Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "C1 · Find Brand Template": {
+      "main": [
+        [
+          {
+            "node": "C2 · Select Brand Template",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "C2 · Select Brand Template": {
+      "main": [
+        [
+          {
+            "node": "C3 · Template OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "C3 · Template OK?": {
+      "main": [
+        [
+          {
+            "node": "D1 · Get Template Dataset",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [],
+        [
+          {
+            "node": "X · Stop With Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "D1 · Get Template Dataset": {
+      "main": [
+        [
+          {
+            "node": "D2 · Validate Dataset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "D2 · Validate Dataset": {
+      "main": [
+        [
+          {
+            "node": "D3 · Dataset OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "D3 · Dataset OK?": {
+      "main": [
+        [
+          {
+            "node": "E1 · Read Local Image",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [],
+        [
+          {
+            "node": "X · Stop With Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "E1 · Read Local Image": {
+      "main": [
+        [
+          {
+            "node": "E2 · Validate Local Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "E2 · Validate Local Image": {
+      "main": [
+        [
+          {
+            "node": "E3 · Imagem OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "E3 · Imagem OK?": {
+      "main": [
+        [
+          {
+            "node": "F1 · Create Asset Upload Job",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [],
+        [
+          {
+            "node": "X · Stop With Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "F1 · Create Asset Upload Job": {
+      "main": [
+        [
+          {
+            "node": "F2 · Check Upload Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "F2 · Check Upload Job": {
+      "main": [
+        [
+          {
+            "node": "F3 · Upload pronto?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "F3 · Upload pronto?": {
+      "main": [
+        [
+          {
+            "node": "H1 · Build Autofill Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "G0 · Wait Upload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "X · Stop With Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "F9 · Resultado (upload_only)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "G0 · Wait Upload": {
+      "main": [
+        [
+          {
+            "node": "G1 · Get Upload Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "G1 · Get Upload Job": {
+      "main": [
+        [
+          {
+            "node": "F2 · Check Upload Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "H1 · Build Autofill Request": {
+      "main": [
+        [
+          {
+            "node": "H2 · Request OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "H2 · Request OK?": {
+      "main": [
+        [
+          {
+            "node": "I1 · Create Autofill Job",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [],
+        [
+          {
+            "node": "X · Stop With Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "I1 · Create Autofill Job": {
+      "main": [
+        [
+          {
+            "node": "J1 · Check Autofill Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "J1 · Check Autofill Job": {
+      "main": [
+        [
+          {
+            "node": "J2 · Autofill pronto?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "J2 · Autofill pronto?": {
+      "main": [
+        [
+          {
+            "node": "K1 · Get Design",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "J0 · Wait Autofill",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "X · Stop With Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "J0 · Wait Autofill": {
+      "main": [
+        [
+          {
+            "node": "J3 · Get Autofill Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "J3 · Get Autofill Job": {
+      "main": [
+        [
+          {
+            "node": "J1 · Check Autofill Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "K1 · Get Design": {
+      "main": [
+        [
+          {
+            "node": "K2 · Check Design",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "K2 · Check Design": {
+      "main": [
+        [
+          {
+            "node": "K3 · Design OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "K3 · Design OK?": {
+      "main": [
+        [
+          {
+            "node": "K9 · Resultado Final",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [],
+        [
+          {
+            "node": "X · Stop With Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

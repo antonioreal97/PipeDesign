@@ -1,0 +1,32 @@
+# Segredos
+.env
+.env.*
+!.env.example
+*.token.json
+data/
+**/.data/
+
+# Assets reais de clientes e saídas de jobs (manter só a estrutura)
+workspace/**
+!workspace/
+!workspace/**/
+!workspace/**/.gitkeep
+Claude outputs/
+
+# Node
+node_modules/
+dist/
+build/
+npm-debug.log*
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# SO / editores
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.cursor/hooks/state/
